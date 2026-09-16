@@ -1,0 +1,40 @@
+# PRIVATE consumer only. Configure approvals, OIDC subjects, IDs and the reviewed release SHA first.
+name: Terraform plan
+run-name: Terraform plan ${{ inputs.environment }}-${{ inputs.location }} ${{ inputs.request_id }}
+'on':
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options:
+        - hub
+        - pprd
+        - prd
+        - bcdr
+        default: pprd
+        required: true
+      location:
+        type: choice
+        options:
+        - uks
+        - ukw
+        default: uks
+        required: true
+      request_id:
+        description: Leave manual, or let gha_* helpers populate a correlation ID.
+        type: string
+        default: manual
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  terraform:
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-azure.yml@v0.2.0
+    with:
+      environment: ${{ inputs.environment }}
+      locations: ${{ format('["{0}"]', inputs.location) }}
+      enable-apply: false
+      plan-client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      apply-client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+      template-ref: ${{ vars.TERRAFORM_DELIVERY_SHA }}
+      runs-on: '["ubuntu-24.04"]'

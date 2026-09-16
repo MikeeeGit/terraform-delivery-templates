@@ -1,0 +1,269 @@
+name: Private Azure delivery for one region
+'on':
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      region:
+        type: string
+        required: true
+      enable-apply:
+        type: boolean
+        default: false
+        description: Enable only after apply environment approvals and protected-branch policies are verified.
+      deployment-branch:
+        type: string
+        default: main
+      plan-client-id:
+        type: string
+        required: true
+      apply-client-id:
+        type: string
+        required: true
+      runs-on:
+        type: string
+        default: '["self-hosted","Linux","X64","terraform"]'
+      whitelist-runner-ip:
+        type: boolean
+        default: false
+      key-vault:
+        type: string
+        default: ''
+      enable-security-scans:
+        type: boolean
+        default: false
+      enforce-security-scans:
+        type: boolean
+        default: false
+      configuration:
+        type: string
+        default: delivery.azure.json
+      prefix:
+        type: string
+        default: ''
+      repository-name:
+        type: string
+        default: ''
+      template-ref:
+        type: string
+        required: true
+        description: Full reviewed commit SHA corresponding to the workflow release.
+      template-repository:
+        type: string
+        default: MikeeeGit/terraform-delivery-templates
+permissions:
+  contents: read
+concurrency:
+  group: terraform-${{ github.repository }}-${{ inputs.environment }}-${{ inputs.region }}
+  cancel-in-progress: false
+env:
+  DEPLOYMENT_BRANCH: ${{ inputs.deployment-branch }}
+  PRIVATE_REPOSITORY: ${{ github.event.repository.private }}
+  TEMPLATE_REF: ${{ inputs.template-ref }}
+  RUNNER_LABELS: ${{ inputs.runs-on }}
+  TD_ENVIRONMENT: ${{ inputs.environment }}
+  TD_REGION: ${{ inputs.region }}
+  TD_CONFIGURATION: ${{ inputs.configuration }}
+  TD_PREFIX: ${{ inputs.prefix }}
+  TD_REPOSITORY: ${{ inputs.repository-name || github.event.repository.name }}
+  TD_RUN_ID: ${{ github.run_id }}:${{ github.run_attempt }}
+  TD_PLAN_CLIENT_ID: ${{ inputs.plan-client-id }}
+  TD_APPLY_CLIENT_ID: ${{ inputs.apply-client-id }}
+  TF_INPUT: 'false'
+  TF_WORKSPACE: default
+  ARM_USE_OIDC: 'true'
+  ARM_USE_AZUREAD: 'true'
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+    - name: Reject public, PR and untrusted calls before deployment runners
+      env:
+        SOURCE_REF: ${{ github.ref }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        python3 - <<'PY'
+        import json, os, re
+        if os.environ['PRIVATE_REPOSITORY'] != 'true' or os.environ['EVENT_NAME'] != 'workflow_dispatch' or os.environ['SOURCE_REF'] != 'refs/heads/'+os.environ['DEPLOYMENT_BRANCH']:
+            raise SystemExit('Delivery requires a manual protected-branch run in a PRIVATE consumer repository.')
+        if not re.fullmatch(r'[0-9a-f]{40}',os.environ['TEMPLATE_REF']):raise SystemExit('template-ref must be a full reviewed commit SHA.')
+        labels=json.loads(os.environ['RUNNER_LABELS'])
+        if not isinstance(labels,list) or not labels or any(not isinstance(x,str) or not re.fullmatch(r'[A-Za-z0-9_.-]+',x) for x in labels):raise SystemExit('runs-on must be a JSON array of runner labels.')
+        for name in ('TD_ENVIRONMENT','TD_REGION'):
+            if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,39}',os.environ[name]):raise SystemExit('Invalid selector.')
+        PY
+  plan:
+    needs: guard
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}-${{ inputs.region }}-plan
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_CLIENT_ID: ${{ inputs.plan-client-id }}
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.plan.outputs.manifest-sha256 }}
+    steps:
+    - name: Isolate Azure, Git and Terraform credentials for this job
+      shell: bash
+      run: |
+        set -euo pipefail
+        credential_directory=$(mktemp -d "$RUNNER_TEMP/terraform-credentials.XXXXXXXX")
+        umask 077
+        touch "$credential_directory/gitconfig" "$credential_directory/terraform.rc"
+        mkdir "$credential_directory/azure"
+        printf '%s
+        ' "TD_CREDENTIAL_DIRECTORY=$credential_directory" "AZURE_CONFIG_DIR=$credential_directory/azure" "GIT_CONFIG_GLOBAL=$credential_directory/gitconfig" "GIT_CONFIG_NOSYSTEM=1" "TF_CLI_CONFIG_FILE=$credential_directory/terraform.rc" >> "$GITHUB_ENV"
+    - name: Check out selected source commit
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ github.sha }}
+        path: source
+        persist-credentials: false
+        clean: true
+    - name: Check out reviewed template implementation
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs.template-repository }}
+        ref: ${{ inputs.template-ref }}
+        path: delivery-templates
+        persist-credentials: false
+    - name: Resolve aliases and independent backend/workload targets
+      id: context
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/azure/terraform.py" context --root "$GITHUB_WORKSPACE/source" --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix "$TD_PREFIX" > "$RUNNER_TEMP/delivery-context.json"
+        python3 - <<'PY'
+        import json,os
+        c=json.load(open(os.environ['RUNNER_TEMP']+'/delivery-context.json'))
+        with open(os.environ['GITHUB_ENV'],'a') as output:
+            for key,value in {'ARM_TENANT_ID':c['tenant_id'],'ARM_SUBSCRIPTION_ID':c['subscription_id']}.items():output.write(f'{key}={value}\n')
+        with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+            for key,value in {'tenant-id':c['tenant_id'],'subscription-id':c['subscription_id']}.items():output.write(f'{key}={value}\n')
+        PY
+    - name: Optional security scans
+      if: ${{ inputs.enable-security-scans }}
+      uses: ./delivery-templates/.github/actions/terraform-security-scans
+      with:
+        directory: ${{ github.workspace }}/source
+        enforce: ${{ inputs.enforce-security-scans }}
+    - name: Install Terraform and authenticate with OIDC
+      uses: ./delivery-templates/.github/actions/azure-terraform-setup
+      with:
+        client-id: ${{ inputs.plan-client-id }}
+        tenant-id: ${{ steps.context.outputs.tenant-id }}
+        subscription-id: ${{ steps.context.outputs.subscription-id }}
+        whitelist-runner-ip: ${{ inputs.whitelist-runner-ip }}
+        key-vault: ${{ inputs.key-vault }}
+    - name: Create locked saved plan and separate receipt
+      id: plan
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/azure/terraform.py" plan --root "$GITHUB_WORKSPACE/source" --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix "$TD_PREFIX" --strict --platform github --run-id "$TD_RUN_ID" --bundle "$RUNNER_TEMP/terraform-plan"
+    - name: Store private same-run plan
+      id: upload
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: terraform-${{ inputs.environment }}-${{ inputs.region }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/terraform-plan/
+        retention-days: 1
+        if-no-files-found: error
+    - name: Remove temporary access and job credentials
+      if: ${{ always() }}
+      uses: ./delivery-templates/.github/actions/azure-terraform-cleanup
+  apply:
+    if: ${{ inputs.enable-apply }}
+    needs:
+    - guard
+    - plan
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}-${{ inputs.region }}-apply
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_CLIENT_ID: ${{ inputs.apply-client-id }}
+      TD_MANIFEST_SHA256: ${{ needs.plan.outputs.manifest-sha256 }}
+    steps:
+    - name: Isolate Azure, Git and Terraform credentials for this job
+      shell: bash
+      run: |
+        set -euo pipefail
+        credential_directory=$(mktemp -d "$RUNNER_TEMP/terraform-credentials.XXXXXXXX")
+        umask 077
+        touch "$credential_directory/gitconfig" "$credential_directory/terraform.rc"
+        mkdir "$credential_directory/azure"
+        printf '%s
+        ' "TD_CREDENTIAL_DIRECTORY=$credential_directory" "AZURE_CONFIG_DIR=$credential_directory/azure" "GIT_CONFIG_GLOBAL=$credential_directory/gitconfig" "GIT_CONFIG_NOSYSTEM=1" "TF_CLI_CONFIG_FILE=$credential_directory/terraform.rc" >> "$GITHUB_ENV"
+    - name: Check out selected source commit
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ github.sha }}
+        path: source
+        persist-credentials: false
+        clean: true
+    - name: Check out reviewed template implementation
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs.template-repository }}
+        ref: ${{ inputs.template-ref }}
+        path: delivery-templates
+        persist-credentials: false
+    - name: Resolve aliases and independent backend/workload targets
+      id: context
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/azure/terraform.py" context --root "$GITHUB_WORKSPACE/source" --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix "$TD_PREFIX" > "$RUNNER_TEMP/delivery-context.json"
+        python3 - <<'PY'
+        import json,os
+        c=json.load(open(os.environ['RUNNER_TEMP']+'/delivery-context.json'))
+        with open(os.environ['GITHUB_ENV'],'a') as output:
+            for key,value in {'ARM_TENANT_ID':c['tenant_id'],'ARM_SUBSCRIPTION_ID':c['subscription_id']}.items():output.write(f'{key}={value}\n')
+        with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+            for key,value in {'tenant-id':c['tenant_id'],'subscription-id':c['subscription_id']}.items():output.write(f'{key}={value}\n')
+        PY
+    - name: Retrieve exact plan artifact from this run
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        artifact-ids: ${{ needs.plan.outputs.artifact-id }}
+        merge-multiple: true
+        path: ${{ runner.temp }}/terraform-plan
+    - name: Install Terraform for pre-authentication verification
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      with:
+        terraform_version: 1.16.3
+        terraform_wrapper: false
+    - name: Reject a superseded protected-branch commit
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/ci_guard.py" github --latest
+    - name: Verify plan receipt before authentication
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/azure/terraform.py" verify --root "$GITHUB_WORKSPACE/source" --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix "$TD_PREFIX" --strict --platform github --run-id "$TD_RUN_ID" --bundle "$RUNNER_TEMP/terraform-plan" --expected-digest "$TD_MANIFEST_SHA256"
+    - name: Install Terraform and authenticate with OIDC
+      uses: ./delivery-templates/.github/actions/azure-terraform-setup
+      with:
+        client-id: ${{ inputs.apply-client-id }}
+        tenant-id: ${{ steps.context.outputs.tenant-id }}
+        subscription-id: ${{ steps.context.outputs.subscription-id }}
+        whitelist-runner-ip: ${{ inputs.whitelist-runner-ip }}
+        key-vault: ${{ inputs.key-vault }}
+    - name: Reject a superseded protected-branch commit
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/ci_guard.py" github --latest
+    - name: Apply saved plan after environment approval
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/azure/terraform.py" apply --root "$GITHUB_WORKSPACE/source" --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix "$TD_PREFIX" --strict --platform github --run-id "$TD_RUN_ID" --bundle "$RUNNER_TEMP/terraform-plan" --expected-digest "$TD_MANIFEST_SHA256" --yes
+    - name: Remove temporary access and job credentials
+      if: ${{ always() }}
+      uses: ./delivery-templates/.github/actions/azure-terraform-cleanup

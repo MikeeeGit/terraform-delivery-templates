@@ -1,0 +1,14 @@
+name: Credential-free Terraform validation
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-validate.yml@v0.2.0
+    with:
+      template-ref: ${{ vars.TERRAFORM_DELIVERY_SHA }}
+      test-directory: tests

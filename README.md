@@ -1,66 +1,32 @@
 # Terraform delivery templates
 
-[![Template checks](https://github.com/MikeeeGit/terraform-delivery-templates/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MikeeeGit/terraform-delivery-templates/actions/workflows/ci.yml)
+Reusable Azure DevOps and GitHub Actions validation, Azure delivery, and local Bash/PowerShell helpers. This public framework carries forward the environment/region and backend-alias model of AZDO-TF-Templates, with organization-specific settings replaced by explicit configuration.
 
-Reusable Terraform validation for GitHub Actions and Azure Pipelines, plus private
-Azure delivery for GitHub Actions. Public contributors validate code without cloud
-credentials; trusted deployments use workload identity federation and a reviewed
-saved plan.
+**Start with [getting started](docs/getting-started.md)**. An empty Azure environment starts with the [backend and identity bootstrap](docs/azure/bootstrap.md). A complete network consumer is [azure-network-foundation](https://github.com/MikeeeGit/azure-network-foundation).
 
-This repository contains the delivery layer, synthetic tests and consumer
-examples. It contains no live environment configuration or Terraform state.
+| Capability | Included |
+|---|---|
+| Public pull-request checks | Hosted, credential-free formatting, backend-free initialization, validation and opt-in mocked tests on both platforms |
+| Azure DevOps delivery | Environment/region expansion, variable groups, independent backend/plan/apply OIDC service connections, saved plan and deployment environment |
+| GitHub delivery | Region matrix, separate plan/apply OIDC identities, isolated credential files, saved plan and deployment environment |
+| Local Azure operations | Matching Bash/PowerShell `tf_setup`, init, plan, apply, destroy, import and GitHub dispatch helpers |
+| Initial setup | Local-state backend bootstrap, explicit remote migration, new secretless identity helper and private-consumer starters |
+| AWS / GCP | [AWS architecture roadmap](docs/aws/architecture.md); no AWS deployment implementation. GCP is future scope. |
 
-| Capability | GitHub Actions | Azure Pipelines |
-| --- | --- | --- |
-| Formatting, backend-free initialization and validation | Implemented | Implemented |
-| Optional credential-free Terraform tests | Implemented | Implemented |
-| Azure workload identity preflight | Starter example | Starter example |
-| AWS workload identity preflight | Starter example | Starter example |
-| Private Azure saved-plan deployment | Implemented; apply disabled by default | Planned |
-| AWS saved-plan deployment | Planned | Planned |
-| GCP adapters | Future scope | Future scope |
+Authenticated templates require **trusted private consumers**. Public pull requests never use cloud identities, state access or persistent deployment runners. Apply is disabled by default until the operator configures and verifies the approval controls described in [security](docs/security.md).
 
-**Qualification:** local Python tests, Terraform mock tests and workflow linting
-validate the implementation. Hosted OIDC, environment approval policies and actual
-resource deployment require consumer integration testing. A workflow file is not
-proof of a successful cloud deployment.
+Terraform **1.16.3** is the tested CLI pin. Terraform configurations retain `>= 1.9, < 2.0`; the Azure DevOps delivery adapter uses the current TerraformTask v5 OIDC refresh path. Bootstrap/starter AzureRM supports `>= 4.33, < 5.0` and commits its reviewed provider lockfile.
 
-## Start here
+## Find the implementation
 
-1. Run the local checks below or copy a [validation example](examples/).
-2. Follow [consuming templates](docs/consuming.md) and replace both template SHA
-   placeholders with the same reviewed published commit.
-3. For deployment, use a private deployment repository and follow
-   [Azure delivery](docs/azure-delivery.md). `enable-apply` remains `false` until
-   the externally configured approval gate is verified.
+- [Architecture and runtime flow](docs/architecture.md)
+- [Naming, aliases and delivery.azure.json](docs/conventions.md)
+- [Local helpers](docs/azure/local-helpers.md)
+- [GitHub Actions delivery](docs/azure/github-actions.md)
+- [Azure DevOps delivery](docs/azure/azure-devops.md)
+- [Validation consumers](docs/consuming.md), [testing](docs/testing.md), [releases](docs/releases.md)
+- [Reviewed changes from the originals](CHANGELOG.md)
 
-```bash
-python3 -m unittest discover -s tests -v
-python3 scripts/install_terraform.py --install-dir .tools/bin
-PATH="$PWD/.tools/bin:$PATH" python3 scripts/validate.py \
-  --source-root "$PWD" --directory tests/fixtures/mock-module --test-directory tests
-```
+The public source is hosted on GitHub. Azure DevOps no longer permits new public projects; Azure mirrors and authenticated consumers are private. See [Microsoft's public-project retirement notice](https://learn.microsoft.com/en-us/azure/devops/organizations/projects/public-projects-retirement?view=azure-devops).
 
-The Linux amd64 installer verifies the reviewed release checksum.
-`.terraform-version` selects Terraform **1.16.3**. The implementation requires that
-selected version, so plan and apply cannot accidentally use different CLIs.
-
-## Design
-
-- Shared Python scripts pass literal argument lists and validate paths.
-- Public PR jobs have no OIDC permissions, cloud credentials or backend access.
-- Private Azure delivery binds plans to source commit, run, backend, identities,
-  lockfile and CLI version, then applies the same binary with state locking.
-- Plan integrity is checked against a digest carried separately from the artifact.
-- Approvals and branch protections are configured outside repository YAML.
-- Actions and consuming template references use full upstream commit SHAs.
-
-Read the [security model](docs/security.md), [authentication guide](docs/authentication.md),
-[test guide](docs/testing.md) and [release policy](docs/releases.md).
-
-GitHub is the intended public host. Microsoft retired new Azure DevOps public
-projects in April 2026 and will convert existing public projects to private in
-2027. Azure Pipelines can consume public GitHub source from a private project.
-[Microsoft retirement notice](https://learn.microsoft.com/en-us/azure/devops/organizations/projects/public-projects-retirement?view=azure-devops).
-
-Licensed under [Apache-2.0](LICENSE).
+Apache-2.0 licensed. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).

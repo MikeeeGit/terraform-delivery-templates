@@ -1,0 +1,12 @@
+.terraform/
+.terraform-delivery/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+terraform.tfvars
+*.auto.tfvars
+.backend.generated.hcl
+remote-backend.tf
+crash.log
+# Commit reviewed .terraform.lock.hcl; never commit local state/backups.

@@ -44,7 +44,7 @@ class ValidationBoundaries(unittest.TestCase):
 
     def test_backend_is_disabled_lockfile_is_readonly_and_flags_are_isolated(self):
         (self.root / ".terraform.lock.hcl").touch()
-        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps({"terraform_version": "1.16.3"}))
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps({"terraform_version": validator.TESTED_TERRAFORM_VERSION}))
         calls = []
         def run(command, **kwargs):
             calls.append((command, kwargs))
@@ -62,7 +62,7 @@ class ValidationBoundaries(unittest.TestCase):
         strange = self.root / "config; echo UNTRUSTED"
         strange.mkdir()
         (strange / "main.tf").write_text("terraform {}\n")
-        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps({"terraform_version": "1.16.3"}))
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps({"terraform_version": validator.TESTED_TERRAFORM_VERSION}))
         with patch.object(validator.subprocess, "run", return_value=completed) as runner:
             validator.validate(self.root, strange.name)
         for call in runner.call_args_list:
@@ -71,7 +71,7 @@ class ValidationBoundaries(unittest.TestCase):
             self.assertNotIn("shell", call.kwargs)
 
     def test_failing_command_stops_later_validation(self):
-        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps({"terraform_version": "1.16.3"}))
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps({"terraform_version": validator.TESTED_TERRAFORM_VERSION}))
         with patch.object(validator.subprocess, "run", side_effect=[completed, subprocess.CalledProcessError(7, ["terraform", "fmt"])]) as runner:
             with self.assertRaises(subprocess.CalledProcessError):
                 validator.validate(self.root, ".")
@@ -89,6 +89,113 @@ class ValidationBoundaries(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validator.validate(self.root, ".", "../outside")
         runner.assert_not_called()
+
+
+class ValidationVariableFiles(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / "main.tf").write_text("terraform {}\n")
+        (self.root / "tests").mkdir()
+        (self.root / "tests/basic.tftest.hcl").write_text('run "basic" { command = plan }\n')
+        self.git("init", "--quiet")
+        self.commit()
+
+    def git(self, *args):
+        return subprocess.run(
+            ["git", "-C", str(self.root), "-c", "core.hooksPath=/dev/null",
+             "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", *args],
+            check=True, capture_output=True,
+        )
+
+    def commit(self):
+        self.git("add", "--all")
+        self.git("commit", "--quiet", "--no-gpg-sign", "-m", "fixture")
+
+    def test_multiple_committed_files_only_reach_test_as_literal_arguments(self):
+        names = ["base.tfvars", "region [dev]; echo harmless.tfvars"]
+        for name in names:
+            (self.root / name).write_text('environment = "dev"\n')
+        self.commit()
+        real_run = subprocess.run
+        calls = []
+        def run(command, **kwargs):
+            if command[0] == "git":
+                return real_run(command, **kwargs)
+            calls.append((command, kwargs))
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"terraform_version": validator.TESTED_TERRAFORM_VERSION}))
+        with patch.object(validator.subprocess, "run", side_effect=run):
+            validator.validate(self.root, ".", "tests", names)
+        test = next(command for command, _ in calls if command[1] == "test")
+        self.assertEqual(test[-2:], [f"-var-file={name}" for name in names])
+        for command, kwargs in calls:
+            self.assertNotIn("shell", kwargs)
+            if command[1] != "test":
+                self.assertFalse(any(arg.startswith("-var-file") for arg in command))
+
+    def test_traversal_absolute_empty_and_outside_paths_are_rejected(self):
+        for name in ("../outside.tfvars", str(self.root / "absolute.tfvars"), "", "child/../../outside.tfvars"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                validator.contained_var_files(self.root, self.root, [name])
+
+    def test_untracked_and_staged_only_files_are_rejected(self):
+        (self.root / "untracked.tfvars").write_text("value = 1\n")
+        with self.assertRaisesRegex(ValueError, "committed"):
+            validator.contained_var_files(self.root, self.root, ["untracked.tfvars"])
+        self.git("add", "untracked.tfvars")
+        with self.assertRaisesRegex(ValueError, "committed"):
+            validator.contained_var_files(self.root, self.root, ["untracked.tfvars"])
+
+    def test_symlink_files_and_directories_are_rejected_even_inside_source(self):
+        (self.root / "real").mkdir()
+        (self.root / "real/vars.tfvars").write_text("value = 1\n")
+        (self.root / "link.tfvars").symlink_to("real/vars.tfvars")
+        (self.root / "linked-directory").symlink_to("real", target_is_directory=True)
+        for name in ("link.tfvars", "linked-directory/vars.tfvars"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "symlink"):
+                validator.contained_var_files(self.root, self.root, [name])
+
+    def test_outside_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as outside:
+            path = Path(outside) / "outside.tfvars"
+            path.write_text("value = 1\n")
+            (self.root / "escape.tfvars").symlink_to(path)
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                validator.contained_var_files(self.root, self.root, ["escape.tfvars"])
+
+    def test_export_ignored_committed_file_is_rejected(self):
+        (self.root / "ignored.tfvars").write_text("value = 1\n")
+        (self.root / ".gitattributes").write_text("ignored.tfvars export-ignore\n")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "archive"):
+            validator.contained_var_files(self.root, self.root, ["ignored.tfvars"])
+
+    def test_nested_working_directory_uses_its_own_relative_files(self):
+        working = self.root / "configuration"
+        working.mkdir()
+        (working / "target.tfvars").write_text("value = 1\n")
+        self.commit()
+        self.assertEqual(validator.contained_var_files(self.root, working, ["target.tfvars"]), ["target.tfvars"])
+        with self.assertRaises(ValueError):
+            validator.contained_var_files(self.root, working, ["../main.tf"])
+
+    def test_directories_and_missing_files_are_rejected(self):
+        with self.assertRaises(ValueError):
+            validator.contained_var_files(self.root, self.root, ["tests"])
+        with self.assertRaises(FileNotFoundError):
+            validator.contained_var_files(self.root, self.root, ["missing.tfvars"])
+
+    def test_var_files_without_tests_are_rejected_before_commands(self):
+        with patch.object(validator.subprocess, "run") as runner:
+            with self.assertRaisesRegex(ValueError, "test-directory"):
+                validator.validate(self.root, ".", var_files=["anything.tfvars"])
+        runner.assert_not_called()
+
+    def test_cli_accepts_repeatable_var_file_flags(self):
+        with patch.object(validator.sys, "argv", ["validate.py", "--source-root", str(self.root), "--test-directory", "tests", "--var-file=one.tfvars", "--var-file=two.tfvars"]), patch.object(validator, "validate") as checked:
+            self.assertEqual(validator.main(), 0)
+        checked.assert_called_once_with(self.root, ".", "tests", ["one.tfvars", "two.tfvars"])
 
 
 class InstallerIntegrity(unittest.TestCase):

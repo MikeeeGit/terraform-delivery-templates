@@ -1,0 +1,30 @@
+{
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "applications": [
+    {
+      "name": "example-terraform-hub-plan",
+      "roles": [
+        {
+          "role": "Reader",
+          "scope": "/subscriptions/00000000-0000-0000-0000-000000000002"
+        },
+        {
+          "role": "Storage Blob Data Contributor",
+          "scope": "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/ukw-hub-tfstate-rsg/providers/Microsoft.Storage/storageAccounts/ukwhubexampletfstatesa/blobServices/default/containers/ukw-hub-azdo-tfstate"
+        }
+      ],
+      "federations": [
+        {
+          "name": "hub-uks-plan",
+          "issuer": "https://token.actions.githubusercontent.com",
+          "subject": "REPLACE_WITH_EXACT_PRIVATE_CALLER_HUB_UKS_PLAN_SUBJECT"
+        },
+        {
+          "name": "hub-ukw-plan",
+          "issuer": "https://token.actions.githubusercontent.com",
+          "subject": "REPLACE_WITH_EXACT_PRIVATE_CALLER_HUB_UKW_PLAN_SUBJECT"
+        }
+      ]
+    }
+  ]
+}

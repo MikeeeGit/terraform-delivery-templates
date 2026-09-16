@@ -2,7 +2,7 @@ name: Template checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
 
@@ -28,3 +28,7 @@ jobs:
       - name: Run mock Terraform fixture
         run: |
           python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE"             --directory tests/fixtures/mock-module --test-directory tests
+      - name: Validate and mock-test backend bootstrap
+        run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory initial-setup/azure/backend --test-directory tests
+      - name: Validate and mock-test Azure starter
+        run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory starter-templates/azure --test-directory tests

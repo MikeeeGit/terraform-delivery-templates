@@ -2,17 +2,17 @@
 # through branch policies; YAML pr triggers below apply to GitHub repositories.
 trigger:
   branches:
-    include: [main]
+    include: [main, develop]
 pr:
   branches:
-    include: [main]
+    include: [main, develop]
 resources:
   repositories:
     - repository: deliveryTemplates
       type: github
       name: MikeeeGit/terraform-delivery-templates
       endpoint: github-public-template-read
-      ref: REPLACE_WITH_40_CHARACTER_COMMIT_SHA
+      ref: refs/tags/v0.2.0
 jobs:
   - template: azure-pipelines/jobs/terraform-validate.yml@deliveryTemplates
     parameters:

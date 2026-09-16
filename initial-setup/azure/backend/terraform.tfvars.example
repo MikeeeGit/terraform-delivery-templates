@@ -1,0 +1,7 @@
+# Replace all three IDs/prefix and the documentation-only IP before using.
+subscription_id    = "00000000-0000-0000-0000-000000000002"
+tenant_id          = "00000000-0000-0000-0000-000000000001"
+prefix             = "exmpl001"
+secondary_region   = "ukw"
+location           = "ukwest"
+administrator_ipv4 = ["203.0.113.10"]

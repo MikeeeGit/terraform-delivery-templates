@@ -1,0 +1,82 @@
+name: Private multi-environment and region Azure Terraform
+'on':
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      enable-apply:
+        type: boolean
+        default: false
+        description: Enable only after apply environment approvals and protected-branch policies are verified.
+      deployment-branch:
+        type: string
+        default: main
+      plan-client-id:
+        type: string
+        required: true
+      apply-client-id:
+        type: string
+        required: true
+      runs-on:
+        type: string
+        default: '["self-hosted","Linux","X64","terraform"]'
+      whitelist-runner-ip:
+        type: boolean
+        default: false
+      key-vault:
+        type: string
+        default: ''
+      enable-security-scans:
+        type: boolean
+        default: false
+      enforce-security-scans:
+        type: boolean
+        default: false
+      configuration:
+        type: string
+        default: delivery.azure.json
+      prefix:
+        type: string
+        default: ''
+      repository-name:
+        type: string
+        default: ''
+      template-ref:
+        type: string
+        required: true
+        description: Full reviewed commit SHA corresponding to the workflow release.
+      template-repository:
+        type: string
+        default: MikeeeGit/terraform-delivery-templates
+      locations:
+        type: string
+        default: '["uks"]'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  regions:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        region: ${{ fromJSON(inputs.locations) }}
+    uses: ./.github/workflows/_terraform-azure-region.yml
+    with:
+      environment: ${{ inputs.environment }}
+      enable-apply: ${{ inputs.enable-apply }}
+      deployment-branch: ${{ inputs.deployment-branch }}
+      plan-client-id: ${{ inputs.plan-client-id }}
+      apply-client-id: ${{ inputs.apply-client-id }}
+      runs-on: ${{ inputs.runs-on }}
+      whitelist-runner-ip: ${{ inputs.whitelist-runner-ip }}
+      key-vault: ${{ inputs.key-vault }}
+      enable-security-scans: ${{ inputs.enable-security-scans }}
+      enforce-security-scans: ${{ inputs.enforce-security-scans }}
+      configuration: ${{ inputs.configuration }}
+      prefix: ${{ inputs.prefix }}
+      repository-name: ${{ inputs.repository-name }}
+      template-ref: ${{ inputs.template-ref }}
+      template-repository: ${{ inputs.template-repository }}
+      region: ${{ matrix.region }}

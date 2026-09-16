@@ -20,6 +20,11 @@ on:
         default: ''
         type: string
 
+      var-files:
+        description: Optional newline-separated committed variable files relative to directory, used only by terraform test
+        default: ''
+        type: string
+
 permissions:
   contents: read
 
@@ -61,5 +66,16 @@ jobs:
         env:
           TERRAFORM_DIRECTORY: ${{ inputs.directory }}
           TEST_DIRECTORY: ${{ inputs.test-directory }}
+          VAR_FILES: ${{ inputs.var-files }}
         run: |
-          python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/validate.py"             --source-root "$GITHUB_WORKSPACE/source"             --directory "$TERRAFORM_DIRECTORY"             --test-directory "$TEST_DIRECTORY"
+          python3 - <<'PYTHON'
+          import os, subprocess, sys
+          from pathlib import Path
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          command = [sys.executable, str(workspace / "delivery-templates/scripts/validate.py"),
+                     "--source-root", str(workspace / "source"),
+                     "--directory", os.environ["TERRAFORM_DIRECTORY"],
+                     "--test-directory", os.environ["TEST_DIRECTORY"]]
+          command.extend(f"--var-file={line}" for line in os.environ["VAR_FILES"].splitlines() if line.strip())
+          subprocess.run(command, check=True)
+          PYTHON

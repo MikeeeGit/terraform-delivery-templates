@@ -2,10 +2,10 @@
 # Azure Repos PR validation is configured as a branch policy.
 trigger:
   branches:
-    include: [main]
+    include: [main, develop]
 pr:
   branches:
-    include: [main]
+    include: [main, develop]
 pool:
   vmImage: ubuntu-24.04
 steps:
@@ -20,3 +20,7 @@ steps:
     displayName: Test script safety and saved-plan contract
   - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory tests/fixtures/mock-module --test-directory tests
     displayName: Validate and test mock Terraform fixture
+  - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory initial-setup/azure/backend --test-directory tests
+    displayName: Validate and mock-test backend bootstrap
+  - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory starter-templates/azure --test-directory tests
+    displayName: Validate and mock-test Azure starter

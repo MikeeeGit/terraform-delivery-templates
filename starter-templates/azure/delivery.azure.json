@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "prefix": "example",
+  "secondary_region": "ukw",
+  "regions": [
+    "uks",
+    "ukw"
+  ],
+  "subscriptions": {
+    "hub": "00000000-0000-0000-0000-000000000002",
+    "pprd": "00000000-0000-0000-0000-000000000003",
+    "prd": "00000000-0000-0000-0000-000000000004"
+  },
+  "environments": {
+    "hub": {
+      "subscription_alias": "hub",
+      "backend_environment": "hub"
+    },
+    "dev": {
+      "subscription_alias": "pprd",
+      "backend_environment": "pprd"
+    },
+    "pprd": {
+      "subscription_alias": "pprd",
+      "backend_environment": "pprd"
+    },
+    "shr": {
+      "subscription_alias": "hub",
+      "backend_environment": "hub"
+    },
+    "prd": {
+      "subscription_alias": "prd",
+      "backend_environment": "prd"
+    },
+    "bcdr": {
+      "subscription_alias": "prd",
+      "backend_environment": "prd"
+    }
+  },
+  "backend": {
+    "subscription_alias": "hub",
+    "resource_group": "{secondary_region}-{backend_environment}-tfstate-rsg",
+    "storage_account": "{secondary_region}{backend_environment}{prefix}tfstatesa",
+    "container": "{secondary_region}-{backend_environment}-azdo-tfstate",
+    "key": "{repository}-{environment}-{region}.tfstate"
+  }
+}
