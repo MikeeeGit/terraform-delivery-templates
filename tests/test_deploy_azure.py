@@ -152,6 +152,21 @@ class SavedPlanContract(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "untracked or ignored"):
                     delivery.require_source(self.source, "a" * 40, self.source)
 
+    def test_untracked_override_symlink_into_managed_data_is_rejected(self):
+        managed = self.source / ".terraform"
+        managed.mkdir()
+        payload = managed / "payload.tf"
+        payload.write_text('terraform {}\n')
+        (self.source / "injected_override.tf").symlink_to(payload)
+        def git(command, **kwargs):
+            output = "a" * 40 if "rev-parse" in command else ""
+            if "--others" in command and "--ignored" not in command:
+                output = "injected_override.tf\0"
+            return subprocess.CompletedProcess(command, 0, stdout=output)
+        with patch.object(delivery.subprocess, "run", side_effect=git):
+            with self.assertRaisesRegex(ValueError, "untracked or ignored"):
+                delivery.require_source(self.source, "a" * 40, self.source)
+
     def test_tracked_symlinks_are_rejected(self):
         (self.source / "linked.tf").symlink_to(self.base / "external.tf")
         def git(command, **kwargs):

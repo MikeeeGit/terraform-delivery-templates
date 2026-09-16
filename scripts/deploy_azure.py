@@ -80,7 +80,9 @@ def require_source(source: Path, commit: str, working: Path) -> None:
     for extra_flags in ([], ["--ignored"]):
         output = subprocess.run(["git", "-C", str(source), "ls-files", "-z", "--others", "--exclude-standard", *extra_flags], check=True, capture_output=True, text=True).stdout
         for name in filter(None, output.split("\0")):
-            if not (source / name).resolve().is_relative_to(working / ".terraform"):
+            candidate = source / name
+            managed_data = working / ".terraform"
+            if not candidate.is_relative_to(managed_data) or not candidate.resolve().is_relative_to(managed_data):
                 raise ValueError("untracked or ignored source files are not allowed in delivery")
 
 
