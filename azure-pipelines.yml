@@ -1,0 +1,22 @@
+# Self-tests only. No cloud login, deployment or service connection is used.
+# Azure Repos PR validation is configured as a branch policy.
+trigger:
+  branches:
+    include: [main]
+pr:
+  branches:
+    include: [main]
+pool:
+  vmImage: ubuntu-24.04
+steps:
+  - checkout: self
+    persistCredentials: false
+  - bash: |
+      set -euo pipefail
+      python3 scripts/install_terraform.py --install-dir "$AGENT_TEMPDIRECTORY/terraform-bin"
+      echo "##vso[task.prependpath]$AGENT_TEMPDIRECTORY/terraform-bin"
+    displayName: Install checksum-verified Terraform
+  - bash: python3 -m unittest discover -s tests -v
+    displayName: Test script safety and saved-plan contract
+  - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory tests/fixtures/mock-module --test-directory tests
+    displayName: Validate and test mock Terraform fixture

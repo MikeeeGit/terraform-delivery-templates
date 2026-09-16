@@ -1,0 +1,39 @@
+# Caller must declare the pinned deliveryTemplates repository resource.
+parameters:
+  - name: jobName
+    type: string
+    default: TerraformValidation
+  - name: directory
+    type: string
+    default: .
+  - name: testDirectory
+    type: string
+    default: ''
+
+jobs:
+  - job: ${{ parameters.jobName }}
+    displayName: Credential-free Terraform validation
+    timeoutInMinutes: 15
+    pool:
+      vmImage: ubuntu-24.04
+    steps:
+      - checkout: self
+        path: s/source
+        persistCredentials: false
+        fetchDepth: 1
+      - checkout: deliveryTemplates
+        path: s/delivery-templates
+        persistCredentials: false
+        fetchDepth: 1
+      - bash: |
+          set -euo pipefail
+          python3 "$PIPELINE_WORKSPACE/s/delivery-templates/scripts/install_terraform.py"             --install-dir "$AGENT_TEMPDIRECTORY/terraform-bin"
+          echo "##vso[task.prependpath]$AGENT_TEMPDIRECTORY/terraform-bin"
+        displayName: Install checksum-verified Terraform 1.16.3
+      - bash: |
+          set -euo pipefail
+          python3 "$PIPELINE_WORKSPACE/s/delivery-templates/scripts/validate.py"             --source-root "$PIPELINE_WORKSPACE/s/source"             --directory "$TERRAFORM_DIRECTORY"             --test-directory "$TEST_DIRECTORY"
+        displayName: Validate configuration
+        env:
+          TERRAFORM_DIRECTORY: ${{ parameters.directory }}
+          TEST_DIRECTORY: ${{ parameters.testDirectory }}

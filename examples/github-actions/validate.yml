@@ -1,0 +1,17 @@
+# Copy to .github/workflows/terraform.yml in a consuming GitHub repository.
+# Replace BOTH template SHA placeholders with the same reviewed commit SHA.
+name: Terraform validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-validate.yml@REPLACE_WITH_40_CHARACTER_COMMIT_SHA
+    with:
+      template-ref: REPLACE_WITH_40_CHARACTER_COMMIT_SHA
+      directory: .
+      # Opt in only when these tests are mocked/credential-free:
+      # test-directory: tests/unit

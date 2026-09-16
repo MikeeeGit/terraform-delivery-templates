@@ -1,0 +1,20 @@
+# Copy into a consuming repository. Azure Repos PR validation is configured
+# through branch policies; YAML pr triggers below apply to GitHub repositories.
+trigger:
+  branches:
+    include: [main]
+pr:
+  branches:
+    include: [main]
+resources:
+  repositories:
+    - repository: deliveryTemplates
+      type: github
+      name: MikeeeGit/terraform-delivery-templates
+      endpoint: github-public-template-read
+      ref: REPLACE_WITH_40_CHARACTER_COMMIT_SHA
+jobs:
+  - template: azure-pipelines/jobs/terraform-validate.yml@deliveryTemplates
+    parameters:
+      directory: .
+      # testDirectory: tests/unit

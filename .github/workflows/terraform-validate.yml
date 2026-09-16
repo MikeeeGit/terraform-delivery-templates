@@ -1,0 +1,65 @@
+name: Reusable Terraform validation
+
+on:
+  workflow_call:
+    inputs:
+      template-ref:
+        description: Full commit SHA of this template repository; match the workflow uses ref
+        required: true
+        type: string
+      template-repository:
+        description: Repository containing the shared validation scripts
+        default: MikeeeGit/terraform-delivery-templates
+        type: string
+      directory:
+        description: Terraform directory relative to the caller repository
+        default: .
+        type: string
+      test-directory:
+        description: Optional directory of known credential-free tests, relative to directory
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Validate template source
+        env:
+          TEMPLATE_REF: ${{ inputs.template-ref }}
+          TEMPLATE_REPOSITORY: ${{ inputs.template-repository }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if not re.fullmatch(r"[0-9a-f]{40}", os.environ["TEMPLATE_REF"]):
+              raise SystemExit("template-ref must be a full lowercase commit SHA")
+          if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", os.environ["TEMPLATE_REPOSITORY"]):
+              raise SystemExit("template-repository must be owner/repository")
+          PY
+      - name: Check out caller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source
+          persist-credentials: false
+      - name: Check out pinned validation implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.template-repository }}
+          ref: ${{ inputs.template-ref }}
+          path: delivery-templates
+          persist-credentials: false
+      - name: Install tested Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+      - name: Validate configuration
+        env:
+          TERRAFORM_DIRECTORY: ${{ inputs.directory }}
+          TEST_DIRECTORY: ${{ inputs.test-directory }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/validate.py"             --source-root "$GITHUB_WORKSPACE/source"             --directory "$TERRAFORM_DIRECTORY"             --test-directory "$TEST_DIRECTORY"

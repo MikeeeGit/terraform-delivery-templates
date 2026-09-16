@@ -1,0 +1,23 @@
+# Copy ONLY to a private deployment repository, after configuring the approvals,
+# OIDC trust and RBAC described in docs/azure-delivery.md. This can create/change
+# real Azure resources when invoked; there is deliberately no push trigger.
+name: Deliver Azure infrastructure
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  delivery:
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-azure-private.yml@REPLACE_WITH_40_CHARACTER_COMMIT_SHA
+    with:
+      template-ref: REPLACE_WITH_40_CHARACTER_COMMIT_SHA
+      enable-apply: false # Change only after verifying the external approval gate.
+      directory: .
+      plan-client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      apply-client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+      tenant-id: ${{ vars.AZURE_TENANT_ID }}
+      subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      backend-storage-account: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+      backend-container: ${{ vars.TF_STATE_CONTAINER }}
+      backend-key: network-foundation/sandbox.tfstate

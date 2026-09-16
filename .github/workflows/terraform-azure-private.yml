@@ -1,0 +1,218 @@
+name: Private Azure Terraform delivery
+
+on:
+  workflow_call:
+    inputs:
+      enable-apply:
+        description: Enable only after required environment approval and branch restrictions are verified
+        type: boolean
+        default: false
+      template-ref:
+        type: string
+        required: true
+      template-repository:
+        type: string
+        default: MikeeeGit/terraform-delivery-templates
+      directory:
+        type: string
+        default: .
+      var-file:
+        type: string
+        default: ''
+      plan-environment:
+        type: string
+        default: azure-plan
+      apply-environment:
+        type: string
+        default: azure-apply
+      plan-client-id:
+        type: string
+        required: true
+      apply-client-id:
+        type: string
+        required: true
+      tenant-id:
+        type: string
+        required: true
+      subscription-id:
+        type: string
+        required: true
+      backend-storage-account:
+        type: string
+        required: true
+      backend-container:
+        type: string
+        required: true
+      backend-key:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ inputs.backend-storage-account }}-${{ inputs.backend-container }}-${{ inputs.backend-key }}
+  cancel-in-progress: false
+
+env:
+  TD_COMMIT: ${{ github.sha }}
+  TD_RUN: ${{ github.run_id }}:${{ github.run_attempt }}
+  TD_TENANT_ID: ${{ inputs.tenant-id }}
+  TD_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+  TD_PLAN_CLIENT_ID: ${{ inputs.plan-client-id }}
+  TD_APPLY_CLIENT_ID: ${{ inputs.apply-client-id }}
+  TD_STORAGE_ACCOUNT: ${{ inputs.backend-storage-account }}
+  TD_CONTAINER: ${{ inputs.backend-container }}
+  TD_KEY: ${{ inputs.backend-key }}
+  TD_ENVIRONMENT: ${{ inputs.apply-environment }}
+  ARM_TENANT_ID: ${{ inputs.tenant-id }}
+  ARM_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+  ARM_USE_OIDC: 'true'
+  ARM_USE_AZUREAD: 'true'
+  TERRAFORM_DIRECTORY: ${{ inputs.directory }}
+  TERRAFORM_VAR_FILE: ${{ inputs.var-file }}
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require a trusted manual private run
+        env:
+          PRIVATE_REPOSITORY: ${{ github.event.repository.private }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.ref }}
+          TEMPLATE_REF: ${{ inputs.template-ref }}
+          TEMPLATE_REPOSITORY: ${{ inputs.template-repository }}
+          PLAN_ENVIRONMENT: ${{ inputs.plan-environment }}
+          APPLY_ENVIRONMENT: ${{ inputs.apply-environment }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if (os.environ['PRIVATE_REPOSITORY'], os.environ['EVENT_NAME'], os.environ['SOURCE_REF']) != ('true', 'workflow_dispatch', 'refs/heads/main'):
+              raise SystemExit('Delivery requires a manual run of main in a private repository.')
+          if not re.fullmatch(r'[0-9a-f]{40}', os.environ['TEMPLATE_REF']):
+              raise SystemExit('template-ref must be a full commit SHA.')
+          if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', os.environ['TEMPLATE_REPOSITORY']):
+              raise SystemExit('Invalid template repository.')
+          for key in ('PLAN_ENVIRONMENT', 'APPLY_ENVIRONMENT'):
+              if not re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', os.environ[key]):
+                  raise SystemExit('Invalid environment name.')
+          if os.environ['PLAN_ENVIRONMENT'] == os.environ['APPLY_ENVIRONMENT']:
+              raise SystemExit('Use separate plan and apply environments.')
+          PY
+
+  plan:
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.plan-environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_CLIENT_ID: ${{ inputs.plan-client-id }}
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.create-plan.outputs.manifest-sha256 }}
+    steps:
+      - name: Check out approved source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+      - name: Check out pinned templates
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.template-repository }}
+          ref: ${{ inputs.template-ref }}
+          path: delivery-templates
+          persist-credentials: false
+      - name: Install tested Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+      - name: Authenticate plan identity
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ inputs.plan-client-id }}
+          tenant-id: ${{ inputs.tenant-id }}
+          subscription-id: ${{ inputs.subscription-id }}
+      - name: Create a bound private plan
+        id: create-plan
+        run: |
+          python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/deploy_azure.py" plan             --source-root "$GITHUB_WORKSPACE/source" --directory "$TERRAFORM_DIRECTORY"             --var-file "$TERRAFORM_VAR_FILE" --bundle "$RUNNER_TEMP/terraform-plan"
+      - name: Store private same-run plan
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: terraform-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/terraform-plan/
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    if: ${{ inputs.enable-apply }}
+    needs: [guard, plan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # REQUIRED: operator-created reviewers, main-only policy and no bypass.
+    # YAML cannot create or prove these environment settings.
+    environment: ${{ inputs.apply-environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_CLIENT_ID: ${{ inputs.apply-client-id }}
+      TD_MANIFEST_SHA256: ${{ needs.plan.outputs.manifest-sha256 }}
+    steps:
+      - name: Check out approved source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+      - name: Check out pinned templates
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.template-repository }}
+          ref: ${{ inputs.template-ref }}
+          path: delivery-templates
+          persist-credentials: false
+      - name: Retrieve the plan from this run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.plan.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/terraform-plan
+      - name: Reject a superseded main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          test "$current" = "$GITHUB_SHA" || { echo 'main changed; generate and approve a new plan.'; exit 1; }
+      - name: Verify plan before authentication
+        run: |
+          python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/deploy_azure.py" verify             --source-root "$GITHUB_WORKSPACE/source" --directory "$TERRAFORM_DIRECTORY"             --var-file "$TERRAFORM_VAR_FILE" --bundle "$RUNNER_TEMP/terraform-plan"
+      - name: Install tested Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+      - name: Authenticate apply identity
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ inputs.apply-client-id }}
+          tenant-id: ${{ inputs.tenant-id }}
+          subscription-id: ${{ inputs.subscription-id }}
+      - name: Apply the reviewed binary plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          test "$current" = "$GITHUB_SHA" || { echo 'main changed; generate and approve a new plan.'; exit 1; }
+          python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/deploy_azure.py" apply             --source-root "$GITHUB_WORKSPACE/source" --directory "$TERRAFORM_DIRECTORY"             --var-file "$TERRAFORM_VAR_FILE" --bundle "$RUNNER_TEMP/terraform-plan"

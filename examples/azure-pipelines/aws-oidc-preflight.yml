@@ -1,0 +1,28 @@
+# PRIVATE project; requires AWS Toolkit >=1.15 and an AWS OIDC service connection.
+# Configure environment approval and service-connection checks before running.
+trigger: none
+pr: none
+stages:
+  - stage: IdentityPreflight
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.Reason'], 'Manual'))
+    jobs:
+      - deployment: AwsIdentity
+        environment: aws-sandbox
+        pool:
+          vmImage: ubuntu-24.04
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - download: none
+                - task: AWSShellScript@1
+                  displayName: Test AWS workload federation
+                  inputs:
+                    awsCredentials: aws-sandbox-oidc
+                    regionName: eu-west-2
+                    scriptType: inline
+                    inlineScript: |
+                      set -euo pipefail
+                      aws sts get-caller-identity --query Account --output text >/dev/null
+                      echo "AWS identity preflight succeeded."
