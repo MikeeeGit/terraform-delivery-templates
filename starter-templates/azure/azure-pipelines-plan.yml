@@ -1,0 +1,23 @@
+# PRIVATE Azure Repos consumer. Install the Microsoft Terraform extension first.
+# Configure service connections with workload identity federation and explicit pipeline authorization.
+trigger: none
+pr: none
+resources:
+  repositories:
+    - repository: deliveryTemplates
+      type: github
+      name: MikeeeGit/terraform-delivery-templates
+      ref: refs/tags/v0.2.0
+      endpoint: github-public-templates
+stages:
+  - template: pipelines/azure-devops/azure/multi-env-region-terraform-deploy.yml@deliveryTemplates
+    parameters:
+      environment: pprd
+      locations: [uks]
+      planServiceConnection: pprd-plan-oidc
+      applyServiceConnection: pprd-apply-oidc
+      backendServiceConnection: hub-backend-oidc
+      useHostedAgents: true
+      enableApply: false
+      # variableGroup: terraform-pprd
+      # whitelistRunnerIp: true # Dedicated egress; authorize narrow firewall permissions.

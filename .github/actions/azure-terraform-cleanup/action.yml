@@ -1,0 +1,19 @@
+name: Azure Terraform cleanup
+description: Remove only recorded access and the isolated job credential directory.
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/azure/firewall.py" cleanup --context "$RUNNER_TEMP/delivery-context.json"
+      --receipt "$RUNNER_TEMP/terraform-firewall.json"
+  - if: ${{ always() }}
+    shell: bash
+    run: |
+      python3 - <<'PY'
+      import os, pathlib, shutil
+      value=os.environ.get('TD_CREDENTIAL_DIRECTORY')
+      if value:
+          path=pathlib.Path(value).resolve();base=pathlib.Path(os.environ['RUNNER_TEMP']).resolve()
+          if path.parent!=base or not path.name.startswith('terraform-credentials.'):raise SystemExit('Unexpected credential directory; cleanup stopped.')
+          shutil.rmtree(path,ignore_errors=True)
+      PY

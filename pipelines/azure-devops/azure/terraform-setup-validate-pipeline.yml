@@ -1,0 +1,136 @@
+parameters:
+- name: environment
+  type: string
+- name: repositoryName
+  type: string
+  default: $(Build.Repository.Name)
+- name: configuration
+  type: string
+  default: delivery.azure.json
+- name: prefix
+  type: string
+  default: ''
+- name: planServiceConnection
+  type: string
+- name: applyServiceConnection
+  type: string
+  default: ''
+- name: backendServiceConnection
+  type: string
+- name: variableGroup
+  type: string
+  default: ''
+- name: deploymentBranch
+  type: string
+  default: main
+- name: selfHostedAgentPool
+  type: string
+  default: terraform-trusted
+- name: useHostedAgents
+  type: boolean
+  default: false
+- name: hostedVmImage
+  type: string
+  default: ubuntu-24.04
+- name: enableApply
+  type: boolean
+  default: false
+- name: whitelistRunnerIp
+  type: boolean
+  default: false
+- name: keyVault
+  type: string
+  default: ''
+- name: enableSecurityScans
+  type: boolean
+  default: false
+- name: enforceSecurityScans
+  type: boolean
+  default: false
+- name: region
+  type: string
+- name: verifyPlan
+  type: boolean
+  default: false
+steps:
+- checkout: self
+  path: s/source
+  persistCredentials: false
+  clean: true
+- checkout: deliveryTemplates
+  path: s/delivery-templates
+  persistCredentials: false
+  clean: true
+- bash: |
+    set -euo pipefail
+    python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/install_terraform.py" --install-dir "$(Agent.TempDirectory)/terraform-bin"
+    echo "##vso[task.prependpath]$(Agent.TempDirectory)/terraform-bin"
+    python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/terraform.py" context --root "$(Pipeline.Workspace)/s/source" --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix "$TD_PREFIX" > "$(Agent.TempDirectory)/delivery-context.json"
+    python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/terraform.py" context --root "$(Pipeline.Workspace)/s/source" --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix "$TD_PREFIX" --platform azure-devops
+  displayName: Install checksum-pinned Terraform and resolve backend/workload aliases
+- ${{ if parameters.verifyPlan }}:
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      buildType: current
+      artifactName: terraform-${{ parameters.environment }}-${{ parameters.region }}-$(Build.BuildId)
+      targetPath: $(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{ parameters.region }}
+  - bash: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/terraform.py" verify --root "$(Pipeline.Workspace)/s/source"
+      --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix
+      "$TD_PREFIX" --bundle "$(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{ parameters.region }}" --strict
+      --platform azure-devops --run-id "$(Build.BuildId)" --expected-digest "$TD_MANIFEST_SHA256"
+    displayName: Verify approved plan before cloud authentication
+    env:
+      TD_MANIFEST_SHA256: $(manifestDigest)
+  - bash: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/ci_guard.py" azure-devops --latest
+    displayName: Reject stale source commit
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      DEPLOYMENT_BRANCH: ${{ parameters.deploymentBranch }}
+- ${{ if parameters.enableSecurityScans }}:
+  - bash: |
+      set -euo pipefail
+      args=()
+      if [[ "$ENFORCE_SCANS" == True || "$ENFORCE_SCANS" == true ]]; then args+=(--enforce); fi
+      python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/security_scans.py" --directory "$(Pipeline.Workspace)/s/source" "${args[@]}"
+    displayName: Optional installed-tool security scans
+    env:
+      ENFORCE_SCANS: ${{ parameters.enforceSecurityScans }}
+- ${{ if parameters.whitelistRunnerIp }}:
+  - task: AzureCLI@2
+    displayName: Temporarily allow dedicated runner IP
+    inputs:
+      azureSubscription: ${{ parameters.backendServiceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      useGlobalConfig: false
+      inlineScript: |
+        set -euo pipefail
+        python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/firewall.py" add --context "$(Agent.TempDirectory)/delivery-context.json" --receipt "$(Agent.TempDirectory)/terraform-firewall.json" --key-vault "$KEY_VAULT"
+        sleep 30
+    env:
+      KEY_VAULT: ${{ parameters.keyVault }}
+- task: TerraformTask@5
+  displayName: Initialize independent OIDC backend without upgrades
+  inputs:
+    provider: azurerm
+    command: init
+    workingDirectory: $(Pipeline.Workspace)/s/source
+    backendServiceArm: ${{ parameters.backendServiceConnection }}
+    backendAzureRmUseEntraIdForAuthentication: true
+    backendAzureRmUseCliFlagsForAuthentication: true
+    backendAzureRmUseIdTokenGeneration: false
+    backendAzureRmOverrideSubscriptionID: $(backend_subscription_id)
+    backendAzureRmResourceGroupName: $(backend_resource_group)
+    backendAzureRmStorageAccountName: $(backend_storage_account)
+    backendAzureRmContainerName: $(backend_container)
+    backendAzureRmKey: $(backend_key)
+    commandOptions: -input=false -reconfigure -lockfile=readonly
+- bash: |-
+    set -euo pipefail
+    terraform -chdir="$(Pipeline.Workspace)/s/source" fmt -check -recursive
+    terraform -chdir="$(Pipeline.Workspace)/s/source" validate
+  displayName: Check format and validate the selected Terraform root
+- bash: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/terraform.py" verify-backend --root "$(Pipeline.Workspace)/s/source"
+    --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix
+    "$TD_PREFIX"
+  displayName: Verify effective state target and default workspace

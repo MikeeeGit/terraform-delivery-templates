@@ -1,0 +1,20 @@
+name: Terraform security scans
+description: Use operator-pinned tflint, Checkov and Trivy; advisory by default.
+inputs:
+  directory:
+    description: Terraform root
+    required: true
+  enforce:
+    description: Fail if a scanner is missing or reports findings
+    default: 'false'
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    env:
+      SCAN_DIRECTORY: ${{ inputs.directory }}
+      ENFORCE_SCANS: ${{ inputs.enforce }}
+    run: |
+      args=()
+      if [[ "$ENFORCE_SCANS" == true ]]; then args+=(--enforce); fi
+      python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/security_scans.py" --directory "$SCAN_DIRECTORY" "${args[@]}"

@@ -14,3 +14,11 @@ __pycache__/
 .tools/
 .env
 .env.*
+
+.terraform-delivery/
+.azure-cli/
+*.backend.hcl
+.backend.generated.hcl
+initial-setup/azure/backend/remote-backend.tf
+initial-setup/azure/federation.json
+!starter-templates/azure/config/**/*.tfvars

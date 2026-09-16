@@ -1,0 +1,37 @@
+name: Azure Terraform setup
+description: 'Trusted private delivery primitive: pinned Terraform, OIDC login and optional access.'
+inputs:
+  client-id:
+    description: OIDC principal client ID
+    required: true
+  tenant-id:
+    description: Expected tenant
+    required: true
+  subscription-id:
+    description: Workload subscription
+    required: true
+  whitelist-runner-ip:
+    description: Dedicated egress IP only; serialize shared-account firewall users
+    default: 'false'
+  key-vault:
+    description: Optional backend-subscription vault
+    default: ''
+runs:
+  using: composite
+  steps:
+  - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+    with:
+      terraform_version: 1.16.3
+      terraform_wrapper: false
+  - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+    with:
+      client-id: ${{ inputs.client-id }}
+      tenant-id: ${{ inputs.tenant-id }}
+      subscription-id: ${{ inputs.subscription-id }}
+  - if: ${{ inputs.whitelist-runner-ip == 'true' }}
+    shell: bash
+    env:
+      KEY_VAULT: ${{ inputs.key-vault }}
+    run: |
+      python3 "$GITHUB_WORKSPACE/delivery-templates/scripts/azure/firewall.py" add --context "$RUNNER_TEMP/delivery-context.json" --receipt "$RUNNER_TEMP/terraform-firewall.json" --key-vault "$KEY_VAULT"
+      sleep 30

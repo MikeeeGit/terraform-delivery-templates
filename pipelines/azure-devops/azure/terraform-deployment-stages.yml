@@ -1,0 +1,274 @@
+parameters:
+- name: environment
+  type: string
+- name: repositoryName
+  type: string
+  default: $(Build.Repository.Name)
+- name: configuration
+  type: string
+  default: delivery.azure.json
+- name: prefix
+  type: string
+  default: ''
+- name: planServiceConnection
+  type: string
+- name: applyServiceConnection
+  type: string
+  default: ''
+- name: backendServiceConnection
+  type: string
+- name: variableGroup
+  type: string
+  default: ''
+- name: deploymentBranch
+  type: string
+  default: main
+- name: selfHostedAgentPool
+  type: string
+  default: terraform-trusted
+- name: useHostedAgents
+  type: boolean
+  default: false
+- name: hostedVmImage
+  type: string
+  default: ubuntu-24.04
+- name: enableApply
+  type: boolean
+  default: false
+- name: whitelistRunnerIp
+  type: boolean
+  default: false
+- name: keyVault
+  type: string
+  default: ''
+- name: enableSecurityScans
+  type: boolean
+  default: false
+- name: enforceSecurityScans
+  type: boolean
+  default: false
+- name: region
+  type: string
+- name: guardStage
+  type: string
+stages:
+- stage: Plan_${{ replace(parameters.environment, '-', '_') }}_${{ replace(parameters.region, '-', '_') }}
+  dependsOn: ${{ parameters.guardStage }}
+  variables:
+  - ${{ if ne(parameters.variableGroup, '') }}:
+    - group: ${{ parameters.variableGroup }}
+  - name: TD_REPOSITORY
+    value: ${{ parameters.repositoryName }}
+  - name: TD_ENVIRONMENT
+    value: ${{ parameters.environment }}
+  - name: TD_REGION
+    value: ${{ parameters.region }}
+  - name: TD_CONFIGURATION
+    value: ${{ parameters.configuration }}
+  - name: TD_PREFIX
+    value: ${{ parameters.prefix }}
+  - name: TD_PLAN_CONNECTION
+    value: ${{ parameters.planServiceConnection }}
+  - name: TD_APPLY_CONNECTION
+    value: ${{ coalesce(parameters.applyServiceConnection, parameters.planServiceConnection) }}
+  - name: TD_BACKEND_CONNECTION
+    value: ${{ parameters.backendServiceConnection }}
+  - name: TF_INPUT
+    value: 'false'
+  - name: TF_DATA_DIR
+    value: ''
+  - name: TF_WORKSPACE
+    value: default
+  - name: TF_CLI_ARGS
+    value: ''
+  - name: TF_CLI_ARGS_init
+    value: ''
+  - name: TF_CLI_ARGS_plan
+    value: ''
+  - name: TF_CLI_ARGS_apply
+    value: ''
+  - name: ARM_USE_AZUREAD
+    value: 'true'
+  jobs:
+  - job: TerraformPlan
+    pool:
+      ${{ if parameters.useHostedAgents }}:
+        vmImage: ${{ parameters.hostedVmImage }}
+      ${{ else }}:
+        name: ${{ parameters.selfHostedAgentPool }}
+    timeoutInMinutes: 30
+    steps:
+    - template: terraform-setup-validate-pipeline.yml
+      parameters:
+        environment: ${{ parameters.environment }}
+        repositoryName: ${{ parameters.repositoryName }}
+        configuration: ${{ parameters.configuration }}
+        prefix: ${{ parameters.prefix }}
+        planServiceConnection: ${{ parameters.planServiceConnection }}
+        applyServiceConnection: ${{ parameters.applyServiceConnection }}
+        backendServiceConnection: ${{ parameters.backendServiceConnection }}
+        variableGroup: ${{ parameters.variableGroup }}
+        deploymentBranch: ${{ parameters.deploymentBranch }}
+        selfHostedAgentPool: ${{ parameters.selfHostedAgentPool }}
+        useHostedAgents: ${{ parameters.useHostedAgents }}
+        hostedVmImage: ${{ parameters.hostedVmImage }}
+        enableApply: ${{ parameters.enableApply }}
+        whitelistRunnerIp: ${{ parameters.whitelistRunnerIp }}
+        keyVault: ${{ parameters.keyVault }}
+        enableSecurityScans: ${{ parameters.enableSecurityScans }}
+        enforceSecurityScans: ${{ parameters.enforceSecurityScans }}
+        region: ${{ parameters.region }}
+        verifyPlan: false
+    - bash: mkdir -p "$(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{ parameters.region }}"
+      displayName: Prepare same-run plan bundle
+    - bash: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/terraform.py" prepare --root "$(Pipeline.Workspace)/s/source"
+        --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix
+        "$TD_PREFIX" --bundle "$(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{ parameters.region }}" --strict
+        --platform azure-devops --run-id "$(Build.BuildId)"
+      displayName: Capture source and target before planning
+    - task: TerraformTask@5
+      displayName: Create saved plan with state locking
+      inputs:
+        provider: azurerm
+        command: plan
+        workingDirectory: $(Pipeline.Workspace)/s/source
+        environmentServiceNameAzureRM: ${{ parameters.planServiceConnection }}
+        environmentAzureRmUseIdTokenGeneration: false
+        environmentAzureRmOverrideSubscriptionID: $(subscription_id)
+        commandOptions: -input=false -lock-timeout=5m -out="$(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{
+          parameters.region }}/tfplan" -var-file="config/global.tfvars" -var-file="config/$(TD_REGION)/$(TD_ENVIRONMENT)/$(TD_ENVIRONMENT).tfvars"
+    - bash: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/terraform.py" record --root "$(Pipeline.Workspace)/s/source"
+        --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION" --prefix
+        "$TD_PREFIX" --bundle "$(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{ parameters.region }}" --strict
+        --platform azure-devops --run-id "$(Build.BuildId)"
+      name: receipt
+      displayName: Record commit, lockfile, target and separate plan digest
+    - task: PublishPipelineArtifact@1
+      displayName: Publish private plan for this run only
+      inputs:
+        targetPath: $(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{ parameters.region }}
+        artifact: terraform-${{ parameters.environment }}-${{ parameters.region }}-$(Build.BuildId)
+        publishLocation: pipeline
+    - ${{ if parameters.whitelistRunnerIp }}:
+      - task: AzureCLI@2
+        displayName: Remove only firewall access recorded by this job
+        condition: always()
+        inputs:
+          azureSubscription: ${{ parameters.backendServiceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          useGlobalConfig: false
+          inlineScript: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/firewall.py" cleanup --context "$(Agent.TempDirectory)/delivery-context.json"
+            --receipt "$(Agent.TempDirectory)/terraform-firewall.json"
+- ${{ if parameters.enableApply }}:
+  - stage: Apply_${{ replace(parameters.environment, '-', '_') }}_${{ replace(parameters.region, '-', '_') }}
+    dependsOn: Plan_${{ replace(parameters.environment, '-', '_') }}_${{ replace(parameters.region, '-', '_') }}
+    lockBehavior: sequential
+    variables:
+    - ${{ if ne(parameters.variableGroup, '') }}:
+      - group: ${{ parameters.variableGroup }}
+    - name: TD_REPOSITORY
+      value: ${{ parameters.repositoryName }}
+    - name: TD_ENVIRONMENT
+      value: ${{ parameters.environment }}
+    - name: TD_REGION
+      value: ${{ parameters.region }}
+    - name: TD_CONFIGURATION
+      value: ${{ parameters.configuration }}
+    - name: TD_PREFIX
+      value: ${{ parameters.prefix }}
+    - name: TD_PLAN_CONNECTION
+      value: ${{ parameters.planServiceConnection }}
+    - name: TD_APPLY_CONNECTION
+      value: ${{ coalesce(parameters.applyServiceConnection, parameters.planServiceConnection) }}
+    - name: TD_BACKEND_CONNECTION
+      value: ${{ parameters.backendServiceConnection }}
+    - name: TF_INPUT
+      value: 'false'
+    - name: TF_DATA_DIR
+      value: ''
+    - name: TF_WORKSPACE
+      value: default
+    - name: TF_CLI_ARGS
+      value: ''
+    - name: TF_CLI_ARGS_init
+      value: ''
+    - name: TF_CLI_ARGS_plan
+      value: ''
+    - name: TF_CLI_ARGS_apply
+      value: ''
+    - name: ARM_USE_AZUREAD
+      value: 'true'
+    - name: manifestDigest
+      value: $[ stageDependencies.Plan_${{ replace(parameters.environment, '-', '_') }}_${{ replace(parameters.region, '-',
+        '_') }}.TerraformPlan.outputs['receipt.manifestSha'] ]
+    jobs:
+    - deployment: TerraformApply
+      pool:
+        ${{ if parameters.useHostedAgents }}:
+          vmImage: ${{ parameters.hostedVmImage }}
+        ${{ else }}:
+          name: ${{ parameters.selfHostedAgentPool }}
+      timeoutInMinutes: 60
+      environment: ${{ parameters.environment }}-${{ parameters.region }}-apply
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: none
+            - template: terraform-setup-validate-pipeline.yml
+              parameters:
+                environment: ${{ parameters.environment }}
+                repositoryName: ${{ parameters.repositoryName }}
+                configuration: ${{ parameters.configuration }}
+                prefix: ${{ parameters.prefix }}
+                planServiceConnection: ${{ parameters.planServiceConnection }}
+                applyServiceConnection: ${{ parameters.applyServiceConnection }}
+                backendServiceConnection: ${{ parameters.backendServiceConnection }}
+                variableGroup: ${{ parameters.variableGroup }}
+                deploymentBranch: ${{ parameters.deploymentBranch }}
+                selfHostedAgentPool: ${{ parameters.selfHostedAgentPool }}
+                useHostedAgents: ${{ parameters.useHostedAgents }}
+                hostedVmImage: ${{ parameters.hostedVmImage }}
+                enableApply: ${{ parameters.enableApply }}
+                whitelistRunnerIp: ${{ parameters.whitelistRunnerIp }}
+                keyVault: ${{ parameters.keyVault }}
+                enableSecurityScans: ${{ parameters.enableSecurityScans }}
+                enforceSecurityScans: ${{ parameters.enforceSecurityScans }}
+                region: ${{ parameters.region }}
+                verifyPlan: true
+            - bash: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/ci_guard.py" azure-devops --latest
+              displayName: Recheck protected branch immediately before apply
+              env:
+                SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                DEPLOYMENT_BRANCH: ${{ parameters.deploymentBranch }}
+            - bash: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/terraform.py" verify --root "$(Pipeline.Workspace)/s/source"
+                --repository "$TD_REPOSITORY" --environment "$TD_ENVIRONMENT" --region "$TD_REGION" --config "$TD_CONFIGURATION"
+                --prefix "$TD_PREFIX" --bundle "$(Pipeline.Workspace)/terraform-${{ parameters.environment }}-${{ parameters.region
+                }}" --strict --platform azure-devops --run-id "$(Build.BuildId)" --expected-digest "$TD_MANIFEST_SHA256"
+              displayName: Reverify plan immediately before apply
+              env:
+                TD_MANIFEST_SHA256: $(manifestDigest)
+            - task: TerraformTask@5
+              displayName: Apply the approved saved plan with locking
+              inputs:
+                provider: azurerm
+                command: apply
+                workingDirectory: $(Pipeline.Workspace)/s/source
+                environmentServiceNameAzureRM: ${{ coalesce(parameters.applyServiceConnection, parameters.planServiceConnection)
+                  }}
+                environmentAzureRmUseIdTokenGeneration: false
+                environmentAzureRmOverrideSubscriptionID: $(subscription_id)
+                commandOptions: -input=false -lock-timeout=5m "$(Pipeline.Workspace)/terraform-${{ parameters.environment
+                  }}-${{ parameters.region }}/tfplan"
+            - ${{ if parameters.whitelistRunnerIp }}:
+              - task: AzureCLI@2
+                displayName: Remove only firewall access recorded by this job
+                condition: always()
+                inputs:
+                  azureSubscription: ${{ parameters.backendServiceConnection }}
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  useGlobalConfig: false
+                  inlineScript: python3 "$(Pipeline.Workspace)/s/delivery-templates/scripts/azure/firewall.py" cleanup --context
+                    "$(Agent.TempDirectory)/delivery-context.json" --receipt "$(Agent.TempDirectory)/terraform-firewall.json"

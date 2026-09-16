@@ -1,59 +1,21 @@
-# Security model
+# Security boundaries
 
-## Public contributions
+Public CI runs on isolated hosted agents with read-only repository permissions. It has no Azure/AWS identity, remote-state access or plan-artifact publishing. Never add a public PR job to a persistent deployment runner, or use `pull_request_target` to execute untrusted Terraform with credentials.
 
-Fork PRs are untrusted executable input: Terraform providers and tests can run
-code. Use disposable hosted runners, a read-only repository token and no cloud
-credentials. Public validation never requests OIDC tokens or a remote backend.
-Do not add secrets, credential-bearing caches, private-module PATs, self-hosted
-runners or `pull_request_target` execution of PR content.
+Authenticated workflows require private consumers and a protected source branch. GitHub accepts manual workflow_dispatch; Azure DevOps checks private-project visibility and Azure Repos source metadata. These guards run on hosted agents before trusted deployment runners. Protect the caller, shared-template refs, module sources, provider lockfiles and state configuration through review.
 
-Provider installation accesses public registries. This is credential-free CI,
-not a network-isolated sandbox. Tests are opt-in and must be mocked or otherwise
-credential-free. Existing local user credentials are outside the CI isolation
-boundary. The scripts reject traversal and symlink escapes, use argument lists,
-clear `TF_CLI_ARGS*` and isolate validation data. They do not sandbox malicious
-Terraform executed with deployment permissions.
+Apply is disabled by default. Environment required reviewers, branch restrictions, service-connection checks, exclusive locks and runner permissions are external platform settings: writing their names in YAML neither creates nor verifies those controls. GitHub private environment review availability depends on the account plan. If an enforceable approval gate is absent, keep CI apply disabled.
 
-## Privileged delivery
+Saved plans can contain plaintext sensitive values. GitHub stores them only in private same-run artifacts for one day; Azure retention must be configured on the private project. The independent manifest digest, exact run/commit, checked source inputs, lockfile/tool version, target and two-hour expiry are checked before apply. Plan creation checks that inputs did not change during execution. Do not expose `terraform show -json` or raw plans in public logs/issues.
 
-Deploy reviewed protected-branch code from a private repository. Protect workflow,
-provider, lockfile and module changes through review. Use constrained OIDC trust
-and separate plan/apply identities. OIDC authenticates; it does not approve a plan.
+Use secretless OIDC with least-privilege, narrowly scoped identities. A plan principal still needs state Blob Data permissions for leases. Providers, modules and data sources can perform arbitrary actions; a Reader principal is not a universal sandbox. Cross-subscription provider aliases are supported and must be reviewed/authorized deliberately. Helpers bind intended targeting; they cannot prove that arbitrary Terraform code follows it.
 
-Azure delivery rejects public, PR, non-main and non-manual callers before cloud
-login. Apply defaults off. Create and configure the apply environment beforehand:
-GitHub can create a named environment without protections. YAML alone cannot
-create or prove reviewer policies. Approval features for private repositories
-are plan-dependent; keep apply disabled if the documented gate is unavailable.
+GitHub jobs isolate Azure/Git/Terraform credential files and remove them at completion; Azure tasks use their job-scoped WIF/CLI mechanisms. Use dedicated private self-hosted runner groups, current agents and controlled administration. No global credential URL rewrite or token printing is included. Private module authentication requires an explicit scoped operator adapter.
 
-State, binary plans and plan JSON are confidential. Public workflow artifacts
-are downloadable by signed-in readers. The Azure adapter only uploads from private
-callers, retains the plan for one day and downloads the exact same-run artifact
-ID. Review private plan logs before approving. Never post raw plans publicly.
+Inherited Terraform CLI flags, data directories and TF_VAR inputs do not silently change helper execution. Strict source checks reject untracked/ignored inputs outside the managed `.terraform` cache and reject source symlinks. Commit the configuration/lockfile before private CI. Default workspaces and unique state keys avoid implicit workspace targeting.
 
-The manifest binds plan hash, source commit, run/attempt, CLI version, lockfile,
-tenant/subscription, plan/apply IDs, state location, default workspace, working
-path and optional tracked variable-file digest. Its SHA-256 is transmitted as a
-separate job output, so replacing both plan and manifest fails verification.
-Plans expire after two hours. This is not protection against a malicious maintainer
-who controls the trusted workflow; source review and external approvals supply
-that trust boundary.
+Optional storage/vault firewall access is opt-in. Only rules recorded as newly added are removed; existing rules remain. Share an egress IP only with external serialization, because independent jobs can observe and depend on the same allow rule. Cleanup handles normal task failures, but power loss/forced runner termination can leave access requiring reconciliation. Private networking avoids these mutations.
 
-Delivery rejects tracked symlinks and all untracked/ignored inputs outside the
-managed `.terraform` directory. It forces and verifies the default workspace,
-keeps state locking enabled and refuses superseded main commits before apply.
-GitHub concurrency is per repository; backend blob leases remain necessary for
-other callers. Do not override stale-plan failures or automatically force-unlock.
+Local receipts are accident/integrity checks, not a trust boundary against a malicious local administrator. Local apply/destroy/import require confirmation unless explicitly given `--yes`. Bootstrap identity creation defaults to review-only, checks tenant/subscription access before mutation, refuses existing application names, and writes progress for partial-failure recovery. Migration retains state backups and requires confirmation.
 
-## Operations
-
-Bootstrap state separately with encryption, restricted data permissions, network
-controls, recovery/versioning and retention. Templates do not open storage or
-Key Vault firewalls or create persistent secrets. Audit cloud/identity and
-artifact access in their hosting platforms.
-
-References: [GitHub workflow security](https://docs.github.com/en/actions/reference/security/secure-use),
-[artifact access](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/download-workflow-artifacts),
-[Terraform sensitive data](https://developer.hashicorp.com/terraform/language/manage-sensitive-data),
-[Azure fork builds](https://learn.microsoft.com/en-us/azure/devops/pipelines/security/secure-access-to-repos?view=azure-devops).
+Report suspected vulnerabilities through [SECURITY.md](../SECURITY.md). No cloud deployment, IAM correctness or compliance certification is implied by unit/mock tests.

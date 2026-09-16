@@ -1,0 +1,12 @@
+.terraform/
+.terraform-delivery/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+crash.log
+*.auto.tfvars
+terraform.tfvars
+.backend.generated.hcl
+*.backend.hcl
+# Commit the reviewed .terraform.lock.hcl and sanitized config/*.tfvars.

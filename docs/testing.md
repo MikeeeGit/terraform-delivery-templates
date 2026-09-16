@@ -1,36 +1,19 @@
-# Testing and qualification
+# Testing
 
-Use Linux amd64, Python 3.10+ and the version selected by `.terraform-version`:
+The tested toolchain is Terraform 1.16.3 and committed provider lockfiles. Install the pinned CLI before running:
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 scripts/install_terraform.py --install-dir .tools/bin
-PATH="$PWD/.tools/bin:$PATH" python3 scripts/validate.py \
-  --source-root "$PWD" --directory tests/fixtures/mock-module --test-directory tests
-actionlint .github/workflows/*.yml
+python3 scripts/validate.py --source-root "$PWD" --directory tests/fixtures/mock-module --test-directory tests
+python3 scripts/validate.py --source-root "$PWD" --directory initial-setup/azure/backend --test-directory tests
+python3 scripts/validate.py --source-root "$PWD" --directory starter-templates/azure --test-directory tests
+bash -n scripts/azure/terraform-functions.sh scripts/github/github-functions.sh
 ```
 
-Python tests cover traversal/symlinks, literal metacharacters, backend isolation,
-lockfile protection, version/failure handling and installer checksum integrity.
-Saved-plan tests cover changed commit/state/run/lockfile, modified plan+manifest,
-expiry, wrong identity/backend, untracked inputs, default workspace, exit code 2
-and applying only the verified binary. Terraform execution is mocked in deployment
-tests; no Azure requests or resource operations occur.
+The Python suite exercises argument handling, namespace/configuration validation, backend targeting, default workspace, separate manifest receipts, changed/expired plans, source mutation during planning, untracked/ignored/symlink inputs, strict CI visibility guards and archived var-file selection. All cloud commands are mocked or omitted. Terraform fixtures use native mock providers; bootstrap checks the same backend naming contract, restricted storage defaults and invalid name combinations.
 
-The synthetic fixture's two native Terraform tests use a mocked Random provider
-for configured input/output propagation and invalid-input rejection. Mock apply
-exercises the test engine without cloud resources. Provider installation still
-downloads a public package. Consumer module tests provide infrastructure-specific
-assertions; this fixture tests the template's ability to run mocked tests.
+Run `actionlint` against `.github/workflows/*.yml` and the starter GitHub callers. Parse the Azure YAML with a YAML parser and check all embedded Bash blocks with `bash -n`. PowerShell files can be syntax-checked with `System.Management.Automation.Language.Parser`; wrapper parity can be tested using a fake `python3` command without authenticating. Keep third-party tooling pinned in a controlled development/runner image.
 
-Supported runner contract: GitHub.com hosted and Microsoft-hosted `ubuntu-24.04`.
-Pinned actions use Node24 and require current hosted runners. GitHub Enterprise
-Server, Windows, macOS and self-hosted runners are not qualified. Installer support
-is Linux amd64. CLI upgrades change `.terraform-version`, the reviewed installer
-checksum and workflow setup pins together.
+Public CI runs the Python suite and all three Terraform validation/test roots. Azure DevOps delivery YAML and GitHub deployment adapters have source/syntax/mock validation; no public CI deploys infrastructure or attempts to validate real approval/IAM configuration.
 
-Before stable release, execute reusable validation from a separate repository on
-both platforms, verify fork isolation, run identity preflights against a disposable
-sandbox, and demonstrate blocked approval plus saved-plan apply and rejection
-cases. Check actual private-reviewer availability and least-privilege roles.
-Mocked tests do not establish cloud integration success.
+A private sandbox acceptance run must separately demonstrate actual OIDC subjects, role propagation, locked remote-state access, a reviewed saved-plan apply, stale-plan rejection, environment gates and cleanup on failure. Record the exact consumer/template/module commits, toolchain and result. Do not describe mocked or schema-only evidence as cloud deployment proof.
