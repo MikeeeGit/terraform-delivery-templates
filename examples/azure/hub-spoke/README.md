@@ -10,6 +10,6 @@ Configure hub-uks-plan/apply, pprd-uks-plan/apply and prd-uks-plan/apply environ
 
 Run the networks in two reviewed configuration phases: first enable_peerings=false, then true after all referenced states exist. Hub finishes before spokes. A successful plan-only hub job does not mean the hub was deployed; first creation still needs approved applies in the required order.
 
-The egress add-on uses a separate state and explicit cross-subscription route permissions. It is not silently included in this pipeline. Run it after network peering, verify DNS/routes, then continue with private AKS and gateway consumer pipelines. Keep their approvals, state and lifecycles independent.
+The egress add-on uses a separate state and explicit cross-subscription route permissions. It is not silently included in this pipeline. Use the [component caller](../component/README.md) for its private root after network peering, verify DNS/routes, then continue with the same component caller in the private AKS and gateway consumers. Keep their approvals, state and lifecycles independent.
 
 These files are examples outside the framework's active .github/workflows. No public CI run authenticates to Azure or deploys them.

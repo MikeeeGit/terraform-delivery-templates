@@ -2,6 +2,10 @@
 
 ## 0.3.0
 
+- Reconcile the September AKS application branch and document separate cluster bootstrap, selected-build promotion and per-slot verification.
+- Add shared private component callers for firewall, routes, AKS and gateway delivery.
+- Connect the standalone firewall, shared Kustomize delivery and multi-cluster sample application.
+- Export reviewed app targets from actual AKS/registry outputs with explicit subscription and context checks.
 - Add a worked hub/spoke, dual-AKS and WAF gateway deployment sequence with explicit state ownership.
 - Add private GitHub Actions and Azure DevOps network caller examples with staged hub/spoke delivery.
 - Document private DNS, inspected egress, ingress prerequisites, cluster cutover and rollback boundaries.

@@ -1,0 +1,35 @@
+# Copy into each private component consumer's .github/workflows directory.
+name: Private infrastructure component
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Reviewed delivery target
+        required: true
+        type: choice
+        options: [hub, pprd, prd, bcdr]
+      region:
+        description: Reviewed region
+        required: true
+        type: choice
+        options: [uks, ukw]
+      apply:
+        description: Apply the saved plan after protected-environment approval
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  component:
+    # Replace the release tag and template-ref variable with the same reviewed SHA.
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-azure.yml@v0.3.0
+    with:
+      environment: ${{ inputs.environment }}
+      locations: ${{ format('["{0}"]', inputs.region) }}
+      enable-apply: ${{ inputs.apply && vars.ENABLE_TERRAFORM_APPLY == 'true' }}
+      plan-client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      apply-client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+      template-ref: ${{ vars.TERRAFORM_DELIVERY_SHA }}
+      runs-on: '["self-hosted","linux","terraform-trusted"]'

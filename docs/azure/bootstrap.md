@@ -100,7 +100,7 @@ For GitHub, create a **private** consumer repository and the environments used b
 
 For example, pprd/uks uses `pprd-uks-plan` and `pprd-uks-apply`. Add protected-branch restrictions and required approval checks as appropriate before enabling apply. Configure repository variables `AZURE_PLAN_CLIENT_ID`, `AZURE_APPLY_CLIENT_ID` and `TERRAFORM_DELIVERY_SHA`; the last value is the full reviewed framework commit corresponding to the release.
 
-Use each platform's **actual issuer, subject and audience**. A default GitHub environment subject may resemble `repo:OWNER/REPOSITORY:environment:pprd-uks-plan`, but organization/repository subject customization can change it. Do not copy a guessed subject into Azure.
+Use each platform's **actual issuer, subject and audience**. For repositories using immutable subjects, a GitHub environment subject resembles `repo:OWNER@OWNER_ID/REPOSITORY@REPOSITORY_ID:environment:pprd-uks-plan`. Older repositories may retain `repo:OWNER/REPOSITORY:environment:pprd-uks-plan`, and customized subjects can differ. Check [GitHub's current subject rules](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims) against the actual private caller. Do not copy a guessed subject into Azure.
 
 The optional `scripts/github/oidc_subject.py` helper prints only `iss`, `sub` and `aud` from a manual private setup job. Run it on an isolated hosted runner with `id-token: write`, the exact intended environment, and `PRIVATE_REPOSITORY` set from the actual repository-private property. This discovery job needs no Azure credential. Do not print the full JWT.
 

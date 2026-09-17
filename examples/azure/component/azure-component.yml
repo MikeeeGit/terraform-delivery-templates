@@ -1,0 +1,33 @@
+# Copy into a private Azure Repos component consumer.
+trigger: none
+pr: none
+parameters:
+  - name: environment
+    type: string
+    default: pprd
+    values: [hub, pprd, prd, bcdr]
+  - name: region
+    type: string
+    default: uks
+    values: [uks, ukw]
+  - name: enableApply
+    type: boolean
+    default: false
+resources:
+  repositories:
+    - repository: deliveryTemplates
+      type: git
+      name: terraform-delivery-templates
+      ref: refs/tags/v0.3.0
+stages:
+  - template: pipelines/azure-devops/azure/multi-env-region-terraform-deploy.yml@deliveryTemplates
+    parameters:
+      environment: ${{ parameters.environment }}
+      locations:
+        - ${{ parameters.region }}
+      planServiceConnection: component-plan-oidc
+      applyServiceConnection: component-apply-oidc
+      backendServiceConnection: hub-backend-oidc
+      useHostedAgents: false
+      selfHostedAgentPool: terraform-trusted
+      enableApply: ${{ parameters.enableApply }}

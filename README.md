@@ -34,3 +34,6 @@ Apache-2.0 licensed. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md) 
 ## Complete Azure platform example
 
 Follow the [hub/spoke, dual-AKS and WAF gateway scenario](docs/azure/hub-spoke-platform.md) for cross-repository deployment order, state ownership and blue/green operation. [Private network caller examples](examples/azure/hub-spoke/README.md) cover both CI platforms.
+
+
+Application delivery is provided by [AKS Delivery Templates](https://github.com/MikeeeGit/aks-delivery-templates), with a [multi-cluster sample](https://github.com/MikeeeGit/aks-platform-demo). The [worked platform guide](docs/azure/hub-spoke-platform.md) connects the shared firewall, registry, independent AKS slots, Kustomize release promotion and WAF gateway.
