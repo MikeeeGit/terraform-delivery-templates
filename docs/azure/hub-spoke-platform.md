@@ -4,6 +4,8 @@ This scenario connects infrastructure and application delivery into a single ope
 
 ## Repository and state ownership
 
+For a first live rehearsal, the [sandbox runbook](sandbox-deployment.md) turns this architecture into ordered prerequisites, saved-plan inputs, verification gates and cleanup. Choose the application owner using [delivery methods](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/delivery-methods.md): the existing pipeline applies Kustomize; the additional Argo CD method reconciles the same application manifests.
+
 | Repository/example | Owns | Consumes |
 |---|---|---|
 | azure-network-foundation/examples/hub-spoke | Hub/two spokes, subnets, NSGs, peering, hub DNS, spoke links and shared example ACR | Backend bootstrap, subscription aliases |
@@ -55,6 +57,8 @@ Use the [private component pipeline callers](../../examples/azure/component/READ
 Update both spoke VNet DNS server lists to the firewall's private IP. The DNS proxy needs hub links to every required private zone. Prepare the [route-only add-on](https://github.com/MikeeeGit/azure-network-foundation/tree/v0.3.0/examples/hub-spoke/egress) with enable_aks_routes=false, then explicitly attach routes after reviewing peering/DNS/NSGs/policy. Verify actual DNS and outbound paths from private test hosts before acknowledging UDR readiness in AKS. Application Gateway receives no AKS route table.
 
 ## 2. Create independent clusters and application permissions
+
+Optional example tfvars are not discovered by the component callers: merge the selected firewall, AKS identity and gateway HTTPS profiles into their private target tfvars before the normal saved-plan cycle. Preserve full map entries and review the resulting plan. The helper reads only global and selected target tfvars; the example three-file test commands do not change this contract.
 
 Use the AKS repository's full pprd/prd target and actual network, DNS, route-table and ACR outputs. Each cluster gets its own version/pools/CIDRs and identity grants. Shared custom private DNS in another subscription requires Microsoft.ContainerService registration in both subscriptions. Check supported Kubernetes patches, encryption-at-host prerequisites, VM quota and zone support.
 
@@ -130,6 +134,8 @@ In the maintained profile, Envoy owns the private .21 load balancer and terminat
 ## 6. Add the gateway and prove traffic/cutover
 
 Provision a real Key Vault TLS certificate covering the chosen client hostnames, then apply the gateway using its complete example and actual backend addresses. Its owned child private alias zone must link to the hub if the firewall DNS proxy resolves it. Use distinct alias-zone names for different environments linked to the same hub.
+
+For a fresh deployment, use the [HTTPS-first profile](https://github.com/MikeeeGit/azure-application-gateway/blob/main/examples/https-first/README.md): live aks01 `.21` and preview aks02 `.21` both use HTTPS443 after both endpoints are verified. No legacy `.20` workload is required.
 
 For a migration from the direct HTTP sample, first apply the [candidate-only HTTPS profile](https://github.com/MikeeeGit/azure-application-gateway/blob/main/examples/ingress-tls/README.md): preview uses aks02 .21 over HTTPS443 while the active .20/HTTP80 route stays intact. The later cutover profile explicitly changes the active alias and backend protocol together. Merely changing HTTP80 to HTTPS443 on an existing active HTTP endpoint would break it.
 
