@@ -1,0 +1,45 @@
+# Private Azure Repos consumer in the same project as the mirrored templates.
+# Required environment approvals/exclusive locks remain external settings.
+trigger: none
+pr: none
+parameters:
+- name: enableApply
+  type: boolean
+  default: false
+resources:
+  repositories:
+  - repository: deliveryTemplates
+    type: git
+    name: terraform-delivery-templates
+    ref: refs/tags/v0.3.0
+stages:
+- template: pipelines/azure-devops/azure/multi-env-region-terraform-deploy.yml@deliveryTemplates
+  parameters:
+    environment: hub
+    locations:
+    - uks
+    planServiceConnection: hub-plan-oidc
+    applyServiceConnection: hub-apply-oidc
+    backendServiceConnection: hub-backend-oidc
+    useHostedAgents: true
+    enableApply: ${{ parameters.enableApply }}
+- template: pipelines/azure-devops/azure/multi-env-region-terraform-deploy.yml@deliveryTemplates
+  parameters:
+    environment: pprd
+    locations:
+    - uks
+    planServiceConnection: pprd-plan-oidc
+    applyServiceConnection: pprd-apply-oidc
+    backendServiceConnection: hub-backend-oidc
+    useHostedAgents: true
+    enableApply: ${{ parameters.enableApply }}
+- template: pipelines/azure-devops/azure/multi-env-region-terraform-deploy.yml@deliveryTemplates
+  parameters:
+    environment: prd
+    locations:
+    - uks
+    planServiceConnection: prd-plan-oidc
+    applyServiceConnection: prd-apply-oidc
+    backendServiceConnection: hub-backend-oidc
+    useHostedAgents: true
+    enableApply: ${{ parameters.enableApply }}

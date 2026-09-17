@@ -1,0 +1,53 @@
+# Copy only into a private network consumer .github/workflows/.
+# Configuration commits control bootstrap/peering phases; see README.md.
+name: Private hub-spoke networks
+'on':
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply reviewed plans after environment approvals; repository
+          enable flag must also be true.
+        type: boolean
+        default: false
+        required: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  hub:
+    name: Network hub
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-azure.yml@v0.3.0
+    with:
+      environment: hub
+      locations: '["uks"]'
+      enable-apply: ${{ inputs.apply && vars.ENABLE_TERRAFORM_APPLY == 'true' }}
+      plan-client-id: ${{ vars.AZURE_HUB_PLAN_CLIENT_ID }}
+      apply-client-id: ${{ vars.AZURE_HUB_APPLY_CLIENT_ID }}
+      template-ref: ${{ vars.TERRAFORM_DELIVERY_SHA }}
+      runs-on: '["ubuntu-24.04"]'
+  pprd:
+    name: Network pprd
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-azure.yml@v0.3.0
+    with:
+      environment: pprd
+      locations: '["uks"]'
+      enable-apply: ${{ inputs.apply && vars.ENABLE_TERRAFORM_APPLY == 'true' }}
+      plan-client-id: ${{ vars.AZURE_PPRD_PLAN_CLIENT_ID }}
+      apply-client-id: ${{ vars.AZURE_PPRD_APPLY_CLIENT_ID }}
+      template-ref: ${{ vars.TERRAFORM_DELIVERY_SHA }}
+      runs-on: '["ubuntu-24.04"]'
+    needs:
+    - hub
+  prd:
+    name: Network prd
+    uses: MikeeeGit/terraform-delivery-templates/.github/workflows/terraform-azure.yml@v0.3.0
+    with:
+      environment: prd
+      locations: '["uks"]'
+      enable-apply: ${{ inputs.apply && vars.ENABLE_TERRAFORM_APPLY == 'true' }}
+      plan-client-id: ${{ vars.AZURE_PRD_PLAN_CLIENT_ID }}
+      apply-client-id: ${{ vars.AZURE_PRD_APPLY_CLIENT_ID }}
+      template-ref: ${{ vars.TERRAFORM_DELIVERY_SHA }}
+      runs-on: '["ubuntu-24.04"]'
+    needs:
+    - hub

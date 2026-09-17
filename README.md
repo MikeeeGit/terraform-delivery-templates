@@ -30,3 +30,7 @@ Terraform **1.16.3** is the tested CLI pin. Terraform configurations retain `>= 
 The public source is hosted on GitHub. Azure DevOps no longer permits new public projects; Azure mirrors and authenticated consumers are private. See [Microsoft's public-project retirement notice](https://learn.microsoft.com/en-us/azure/devops/organizations/projects/public-projects-retirement?view=azure-devops).
 
 Apache-2.0 licensed. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+## Complete Azure platform example
+
+Follow the [hub/spoke, dual-AKS and WAF gateway scenario](docs/azure/hub-spoke-platform.md) for cross-repository deployment order, state ownership and blue/green operation. [Private network caller examples](examples/azure/hub-spoke/README.md) cover both CI platforms.

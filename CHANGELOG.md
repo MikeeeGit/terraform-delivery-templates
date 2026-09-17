@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Add a worked hub/spoke, dual-AKS and WAF gateway deployment sequence with explicit state ownership.
+- Add private GitHub Actions and Azure DevOps network caller examples with staged hub/spoke delivery.
+- Document private DNS, inspected egress, ingress prerequisites, cluster cutover and rollback boundaries.
+
 ## 0.2.0 — reviewed Azure framework
 
 Restores the proven Azure DevOps wrapper/stages/setup flow, GitHub environment/region matrix, separate backend/workload targeting, aliases, optional variable groups/scans/firewall access, trusted self-hosted option and Bash/PowerShell helper names from AZDO-TF-Templates. The GitHub source reviewed for credential isolation was develop commit `899d72872fd374b4b9f0543bcc93651926411126`; Azure/local differences were examined before copying behavior. No original Git history, corporate Misc files or private configuration is imported.
