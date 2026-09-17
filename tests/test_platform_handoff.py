@@ -2,6 +2,8 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+import json
+import tempfile
 
 spec = importlib.util.spec_from_file_location(
     "platform_handoff", Path(__file__).resolve().parents[1] / "scripts/azure/platform_handoff.py"
@@ -96,3 +98,96 @@ class HandoffTests(unittest.TestCase):
         result = self.export()
         self.assertEqual(len(result["targets"]), 2)
         self.assertNotIn("unrelated_secret", result)
+
+
+class WorkloadHandoffTests(unittest.TestCase):
+    def setUp(self):
+        HandoffTests.setUp(self)
+        self.client = "00000000-0000-0000-0000-000000000009"
+        for slot, cluster in self.aks["clusters"]["value"].items():
+            cluster["oidc_issuer_url"] = f"https://uksouth.oic.prod-aks.azure.com/example/{slot}/"
+        self.aks["workload_identities"] = {"sensitive": False, "value": {
+            "platform-demo": {
+                "id": f"/subscriptions/{self.workload}/resourceGroups/actual-aks-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/app",
+                "client_id": self.client, "tenant_id": self.tenant,
+                "service_accounts": {"app": {"namespace": "platform-demo", "service_account": "platform-demo",
+                                               "clusters": ["aks01", "aks02"]}},
+                "federated_credentials": {
+                    slot: {"cluster": slot, "issuer": cluster["oidc_issuer_url"],
+                           "subject": "system:serviceaccount:platform-demo:platform-demo",
+                           "audience": ["api://AzureADTokenExchange"]}
+                    for slot, cluster in self.aks["clusters"]["value"].items()
+                },
+            }
+        }}
+
+    def export(self):
+        return HandoffTests.export(self)
+
+    def workload_export(self):
+        return handoff.export_workload(self.export(), self.aks, "platform-demo", "app")
+
+    def identity(self):
+        return self.aks["workload_identities"]["value"]["platform-demo"]
+
+    def test_exports_actual_service_account_and_both_issuers(self):
+        value = self.workload_export()
+        self.assertEqual(value["service_account_manifest"]["metadata"]["annotations"]["azure.workload.identity/client-id"], self.client)
+        self.assertEqual(value["secret_provider_parameters"]["clientID"], self.client)
+        self.assertEqual({t["slot"] for t in value["targets"]}, {"aks01", "aks02"})
+        self.assertEqual(len({t["issuer"] for t in value["targets"]}), 2)
+        self.assertNotIn("principal_id", value)
+
+    def test_rejects_identity_from_wrong_tenant_or_subscription(self):
+        original = copy.deepcopy(self.identity())
+        self.identity()["tenant_id"] = self.hub
+        with self.assertRaises(ValueError): self.workload_export()
+        self.aks["workload_identities"]["value"]["platform-demo"] = copy.deepcopy(original)
+        self.identity()["id"] = self.identity()["id"].replace(self.workload, self.hub)
+        with self.assertRaises(ValueError): self.workload_export()
+
+    def test_rejects_control_plane_identity_type(self):
+        self.identity()["id"] = self.aks["clusters"]["value"]["aks01"]["id"]
+        with self.assertRaises(ValueError): self.workload_export()
+
+    def test_rejects_namespace_or_missing_slot_federation(self):
+        self.identity()["service_accounts"]["app"]["namespace"] = "other-app"
+        with self.assertRaises(ValueError): self.workload_export()
+        self.identity()["service_accounts"]["app"]["namespace"] = "platform-demo"
+        self.identity()["service_accounts"]["app"]["clusters"] = ["aks01"]
+        with self.assertRaises(ValueError): self.workload_export()
+
+    def test_rejects_missing_or_wrong_applied_federation(self):
+        for field, bad in (("issuer", "https://another.example/"), ("subject", "system:serviceaccount:other:other"),
+                           ("audience", ["another-audience"]), ("cluster", "aks01")):
+            with self.subTest(field=field):
+                original = copy.deepcopy(self.identity()["federated_credentials"])
+                self.identity()["federated_credentials"]["aks02"][field] = bad
+                with self.assertRaises(ValueError): self.workload_export()
+                self.identity()["federated_credentials"] = original
+        del self.identity()["federated_credentials"]["aks02"]
+        with self.assertRaises(ValueError): self.workload_export()
+
+    def test_does_not_require_unused_slot(self):
+        self.template["targets"] = self.template["targets"][:1]
+        self.identity()["service_accounts"]["app"]["clusters"] = ["aks01"]
+        del self.identity()["federated_credentials"]["aks02"]
+        self.assertEqual(len(self.workload_export()["targets"]), 1)
+
+    def test_workload_sensitive_output_rejected(self):
+        self.aks["workload_identities"]["sensitive"] = True
+        with self.assertRaises(ValueError): self.workload_export()
+
+    def test_review_outputs_never_replace_existing_or_leave_partial_pair(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app, workload = root / "app.json", root / "workload.json"
+            workload.write_text("existing-review")
+            with self.assertRaises(FileExistsError):
+                handoff.write_new_jsons([(app, {"app": True}), (workload, {"identity": True})])
+            self.assertFalse(app.exists())
+            self.assertEqual(workload.read_text(), "existing-review")
+            with self.assertRaises(ValueError):
+                handoff.write_new_jsons([(app, {}), (app, {})])
+            handoff.write_new_jsons([(app, {"app": True})])
+            self.assertEqual(json.loads(app.read_text()), {"app": True})
