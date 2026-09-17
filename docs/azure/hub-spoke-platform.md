@@ -12,7 +12,7 @@ This scenario connects infrastructure and application delivery into a single ope
 | azure-aks-foundation | Independent aks01/aks02 clusters, pools, control-plane/kubelet/workload identities and roles | Network, regional DNS, route tables and ACR |
 | azure-application-gateway | WAF gateway, listeners/probes/routing, TLS access and optional private backend aliases | Dedicated subnet, actual backend Services and existing Key Vault certificate |
 | terraform-delivery-templates | Infrastructure bootstrap, Terraform saved-plan delivery and local helpers | Reviewed private infrastructure inputs |
-| aks-delivery-templates | Image build, immutable release receipts, Kustomize render/apply and rollout checks | Private app configuration, protected identity/environment controls |
+| aks-delivery-templates | Separate namespace/RBAC bootstrap, versioned Helm platform services, scanned image receipts, Kustomize app delivery and selected-slot HTTPS checks | Private platform/app configuration, protected identities and environments |
 | aks-platform-demo | New sample app, Dockerfile and per-slot Kustomize overlays | Shared application templates and applied infrastructure |
 
 The [network pack](https://github.com/MikeeeGit/azure-network-foundation/tree/v0.3.0/examples/hub-spoke) uses hub10.80/16, pprd10.81/16 and prd10.82/16. Two AKS slots live in one selected spoke; these are independent upgrade/deployment slots, not automatic regional disaster recovery.
@@ -23,13 +23,14 @@ flowchart TD
   Network --> FW[Azure Firewall and inherited policy]
   FW --> DNS[Spoke DNS and AKS route attachment]
   DNS --> AKS[Independent aks01 and aks02]
-  Source[Reviewed application commit] --> Build[Build once and push to ACR]
-  Build --> Receipt[Immutable image digest and source commit]
-  AKS --> Render[Kustomize selected slot]
+  AKS --> Platform[Namespace/RBAC, Gateway API CRDs and Envoy Helm release]
+  Source[Reviewed application commit] --> Build[Build once, push and scan immutable image]
+  Build --> Receipt[Passed scan, image digest and source commit]
+  Platform --> Render[Kustomize selected slot]
   Receipt --> Render
   Render --> Deploy[Private API apply and rollout checks]
-  Deploy --> ILB[Private Service for each cluster]
-  ILB --> Gateway[Application Gateway WAF and TLS]
+  Deploy --> ILB[HTTPRoute and private Envoy HTTPS endpoint per cluster]
+  ILB --> Gateway[Application Gateway WAF and TLS re-encryption]
   Gateway --> Verify[Application check, reviewed cutover and rollback]
 ~~~
 
@@ -39,7 +40,7 @@ The inspected aks-common-templates source uses Kustomize for applications, with 
 
 The updated September archive includes the application's AKS branch. Its container pipeline builds once, selects an existing release for later promotion, loops over chosen cluster slots and calls shared ConfigMap, CSI and Kustomize templates, with ordered environments and application checks. Separate optional database delivery is application-specific; this stateless sample has no database. Earlier snapshots contained the IIS branch instead, so they were not sufficient evidence for the AKS flow. The public sample is newly authored Node application code; no proprietary business logic, variable groups, machine paths or deployment credentials are copied.
 
-The archived community ingress-nginx platform installer is not carried into this baseline: that project retired in March2026. The sample instead uses one internal LoadBalancer Service per cluster directly behind Application Gateway. For a multi-application ingress platform, choose a maintained controller separately. [Kubernetes retirement statement](https://kubernetes.io/blog/2026/01/29/ingress-nginx-statement/).
+The maintained platform profile replaces community ingress-nginx with Gateway API and Envoy Gateway, retaining the independently versioned Helm setup layer. Application Gateway WAF fronts a private HTTPS listener in each cluster; HTTPRoute connects it to the sample ClusterIP Service. A smaller direct-ILB sample remains available for learning, and original NGINX configuration is labelled as a retired compatibility reference. See the [three-tier explanation](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/three-tier-deployment-system.md) and [ingress migration guide](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/ingress-migration.md).
 
 ## 1. Bootstrap and create the network path
 
@@ -59,7 +60,7 @@ Use the AKS repository's full pprd/prd target and actual network, DNS, route-tab
 
 Configure classic ACR kubelet access with AcrPull; for an ABAC registry choose the documented repository-reader role instead. Build and deployment identities are separate from kubelet and application workload identities.
 
-Run the shared AKS bootstrap pipeline once per selected cluster, using its separate privileged identity and bootstrap approval environment. Its reviewed bootstrap.apps.json pins the namespace policy version and lists deployment principal object IDs. The pipeline checks private AKS, Entra/Azure RBAC, OIDC/workload identity and requested CSI readiness, creates the restricted application namespace and grants scoped deployment roles. Local operator commands remain an alternative. Do not use administrator kubecredentials: local accounts are disabled. The sample namespace is platform-demo; application-specific ServiceAccount/SecretProviderClass resources remain reviewed namespaced configuration.
+Run the shared AKS bootstrap pipeline once per selected cluster, using its separate privileged identity and bootstrap approval environment. Its reviewed bootstrap.gateway.apps.json pins the namespace policy version and lists deployment principal object IDs. The pipeline checks private AKS, Entra/Azure RBAC, OIDC/workload identity and requested CSI readiness, creates the restricted application namespace and grants scoped deployment roles. Local operator commands remain an alternative. Do not use administrator kubecredentials: local accounts are disabled. The sample namespace is platform-demo; application-specific ServiceAccount/SecretProviderClass resources remain reviewed namespaced configuration.
 
 For each CI deployment principal and selected cluster, the minimal baseline is:
 
@@ -80,7 +81,7 @@ Both CI systems require trusted private runners that resolve/reach private AKS A
 
 ## 3. Export actual targets into the application consumer
 
-Clone the public demo into a private consumer. Its delivery.apps.json selects exact environment/region/slot records, each with its own workload subscription. Registry subscription is separate. AKS output names are authoritative; the app templates never infer cluster names from company naming rules.
+Clone the public demo into a private consumer. Its delivery.gateway.apps.json selects exact environment/region/slot records, each with its own workload subscription. Registry subscription is separate. AKS output names are authoritative; the app templates never infer cluster names from company naming rules.
 
 From the respective initialized private Terraform roots, export metadata:
 
@@ -94,7 +95,7 @@ Then create a new review file in the private app checkout:
 
 ~~~sh
 python3 ../terraform-delivery-templates/scripts/azure/platform_handoff.py \
-  --template delivery.apps.json \
+  --template delivery.gateway.apps.json \
   --aks-outputs /tmp/aks-outputs.json \
   --registry-outputs /tmp/hub-outputs.json \
   --delivery-config ../azure-aks-foundation/delivery.azure.json \
@@ -104,21 +105,33 @@ python3 ../terraform-delivery-templates/scripts/azure/platform_handoff.py \
 
 The helper checks the applied AKS context against the delivery target, extracts only selected non-sensitive fields, verifies resource ID/name/subscription agreement and refuses to overwrite an existing file. It updates both cluster targets and the registry from actual outputs, preserving app-owned namespace/deployment/overlay settings. It exports only the selected environment/region; use separate reviewed configurations for other environments. It does not create resources, write secrets or grant permissions.
 
-Review the generated file, run the application delivery validator, and make it the private consumer's reviewed configuration. Do not copy real estate configuration back into the public sample. Adjust the Kustomize slot overlays to the actual reserved Service addresses and network policy.
+Review the generated file, run the application delivery validator, and make it the private consumer's reviewed configuration. Do not copy real estate configuration back into the public sample. Review the [workload identity handoff](workload-identity-handoff.md) to bind the selected ServiceAccount to the applied UAMI and both OIDC issuers. Adjust the platform slot configuration to actual reserved ingress addresses and the app overlay to the intended TLS/route and NetworkPolicy contracts.
 
-## 4. Build once and deploy selected slots
+## 4. Install versioned cluster platform services
+
+Use the shared framework's maintained Envoy platform profile in a separate private platform consumer. Give its pipeline a separately approved platform identity/environment: CRDs, GatewayClass, controller RBAC and Helm release objects require permissions beyond an ordinary app deployment.
+
+The reviewed platform bundle pins CRD bytes, chart package, values and common manifests. Its sequence establishes namespaces without removing existing policy labels, applies explicitly owned CRDs and waits for establishment, installs the Helm controller, then applies per-slot Envoy/Gateway configuration and collects diagnostics. Keep CRD upgrades deliberate; Helm rollback alone cannot undo a schema change.
+
+Reserve candidate ingress addresses distinct from any existing direct or legacy endpoints. The worked PPRD profile uses 10.81.0.21 for aks01 and 10.81.4.21 for aks02, leaving the older .20 endpoints available during migration. Configure only private load balancers and reviewed source ranges. Permit required controller/image-registry egress through the firewall or use verified private mirrors.
+
+The application namespace contains the platform-owned HTTPS Gateway and app-owned HTTPRoute/Service. Enable exact custom-resource permissions for the app deployment principal without granting it controller or listener ownership. Key Vault CSI synchronization needs the declared workload identity and a live mounting pod; it may complete only after the app is deployed. See the [operator sequence](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/operators-walkthrough.md).
+
+## 5. Build once and deploy selected slots
 
 Use the [shared application templates](https://github.com/MikeeeGit/aks-delivery-templates) from the [sample private pipeline callers](https://github.com/MikeeeGit/aks-platform-demo). Pin the reusable template release to its immutable commit in the private consumer.
 
-Run app tests, build the protected branch commit and push one container image to the configured ACR. Retain the source commit and repository@sha256 digest in the build receipt. The normal promotion caller selects a successful build run from the configured trusted producer, retrieves its receipt and verifies its repository, protected branch, source and run binding. Deploy that same digest to aks01, aks02 or both, sequentially by default; never rebuild an image merely to promote it to another slot. Azure DevOps also has a current-build-to-deploy caller, retaining the same receipt contract.
+Run app tests, build the protected branch commit and push one container image to the configured ACR. Scan that exact immutable digest with the pinned Trivy scanner and fail on HIGH/CRITICAL findings or scanner errors. Only a passed scan produces a promotable receipt containing the source commit and repository@sha256 digest; keep the separate scan report as a private artifact. The normal promotion caller selects a successful build run from the configured trusted producer, retrieves its receipt and verifies its repository, protected branch, source and run binding. Deploy that same digest to aks01, aks02 or both, sequentially by default; never rebuild an image merely to promote it to another slot. Azure DevOps also has a current-build-to-deploy caller, retaining the same receipt contract.
 
-Rendering reads the committed source/configuration, selects the exact target, substitutes the digest in an isolated Kustomize snapshot and produces a reviewable manifest/receipt bundle. Apply verifies the approved bundle, gets isolated user kubecredentials, checks namespace access, performs server-side validation and waits for rollout. The sample then verifies readiness and the exact requested revision/slot through its selected cluster Service. These checks fail the deployment if the observed release differs. Gateway traffic verification remains a separate end-to-end check.
+Rendering reads the committed source/configuration, selects the exact target, substitutes the digest in an isolated Kustomize snapshot and produces a reviewable manifest/receipt bundle. Apply verifies the approved bundle, gets isolated user kubecredentials, checks namespace access, performs server-side validation and waits for rollout. The maintained sample checks readiness and the exact requested revision/slot, current Gateway/HTTPRoute status and HTTPS traffic through the selected Envoy listener with hostname/certificate validation. These checks fail the deployment if the route, TLS or observed release differs. The outer Azure WAF path still requires a separate end-to-end check.
 
-The sample's internal Services use10.81.0.20 and10.81.4.20, port80 to app8080, with modern Azure internal-load-balancer/IP annotations. These addresses become resources only when the Services are successfully applied. They match the gateway example's private backend/probe configuration. No ingress controller or public Kubernetes LoadBalancer is required for this one application. [Microsoft internal Service guidance](https://learn.microsoft.com/en-us/azure/aks/internal-lb).
+In the maintained profile, Envoy owns the private .21 load balancer and terminates HTTPS443; the app Service is ClusterIP80 to app8080. NetworkPolicy admits the selected Envoy proxy pods. Verify the assigned addresses against the reviewed slot configuration before configuring the gateway backend. The older direct-ILB example owns .20 and remains a distinct profile; never assign the same IP to both Services. [Microsoft internal Service guidance](https://learn.microsoft.com/en-us/azure/aks/internal-lb).
 
-## 5. Add the gateway and prove traffic/cutover
+## 6. Add the gateway and prove traffic/cutover
 
 Provision a real Key Vault TLS certificate covering the chosen client hostnames, then apply the gateway using its complete example and actual backend addresses. Its owned child private alias zone must link to the hub if the firewall DNS proxy resolves it. Use distinct alias-zone names for different environments linked to the same hub.
+
+For a migration from the direct HTTP sample, first apply the [candidate-only HTTPS profile](https://github.com/MikeeeGit/azure-application-gateway/blob/main/examples/ingress-tls/README.md): preview uses aks02 .21 over HTTPS443 while the active .20/HTTP80 route stays intact. The later cutover profile explicitly changes the active alias and backend protocol together. Merely changing HTTP80 to HTTPS443 on an existing active HTTP endpoint would break it.
 
 Check gateway backend health, TLS, each intended Host/path, redirects and WAF behavior. The sample exposes health/readiness and release/slot metadata for verification. Test inactive and active cluster endpoints from the private network before changing traffic.
 
