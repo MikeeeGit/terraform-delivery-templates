@@ -37,3 +37,6 @@ For your first real Azure rehearsal, use the [sandbox deployment runbook](docs/a
 
 
 Application delivery is provided by [AKS Delivery Templates](https://github.com/MikeeeGit/aks-delivery-templates), with a [multi-cluster sample](https://github.com/MikeeeGit/aks-platform-demo). The [worked platform guide](docs/azure/hub-spoke-platform.md) connects the shared firewall, registry, independent AKS slots, Kustomize release promotion and WAF gateway.
+
+
+For VM-based workloads, [Azure VM Foundation](https://github.com/MikeeeGit/azure-vm-foundation) adds private Linux/Windows VMs, Ansible configuration and SQL Always On. The [VM and SQL delivery guide](docs/azure/vm-sql-foundation.md) connects network outputs, these templates and the Ansible handoff.
