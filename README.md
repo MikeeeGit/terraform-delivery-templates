@@ -37,3 +37,7 @@ For your first real Azure rehearsal, use the [sandbox deployment runbook](docs/a
 
 
 Application delivery is provided by [AKS Delivery Templates](https://github.com/MikeeeGit/aks-delivery-templates), with a [multi-cluster sample](https://github.com/MikeeeGit/aks-platform-demo). The [worked platform guide](docs/azure/hub-spoke-platform.md) connects the shared firewall, registry, independent AKS slots, Kustomize release promotion and WAF gateway.
+
+## CI change scope
+
+Markdown-only edits use lightweight required GitHub checks and are excluded from automatic Azure validation builds. Changes to Terraform, application code, scripts, workflow definitions or executable examples still run full validation, including examples stored under docs/. Mixed changes also run full validation. Manual GitHub runs and unknown Git comparison ranges default to full validation.
