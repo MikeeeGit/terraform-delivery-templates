@@ -49,6 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: source
+          fetch-depth: 0
           persist-credentials: false
       - name: Check out pinned validation implementation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,12 +58,17 @@ jobs:
           ref: ${{ inputs.template-ref }}
           path: delivery-templates
           persist-credentials: false
+      - name: Determine validation scope
+        id: scope
+        run: python3 delivery-templates/scripts/ci_scope.py --source source
       - name: Install tested Terraform
+        if: steps.scope.outputs.run-tests == 'true'
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.16.3
           terraform_wrapper: false
       - name: Validate configuration
+        if: steps.scope.outputs.run-tests == 'true'
         env:
           TERRAFORM_DIRECTORY: ${{ inputs.directory }}
           TEST_DIRECTORY: ${{ inputs.test-directory }}

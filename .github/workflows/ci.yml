@@ -18,17 +18,26 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Determine validation scope
+        id: scope
+        run: python3 scripts/ci_scope.py --source .
       - name: Install tested Terraform
+        if: steps.scope.outputs.run-tests == 'true'
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.16.3
           terraform_wrapper: false
       - name: Test validation boundaries
+        if: steps.scope.outputs.run-tests == 'true'
         run: python3 -m unittest discover -s tests -v
       - name: Run mock Terraform fixture
+        if: steps.scope.outputs.run-tests == 'true'
         run: |
           python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE"             --directory tests/fixtures/mock-module --test-directory tests
       - name: Validate and mock-test backend bootstrap
+        if: steps.scope.outputs.run-tests == 'true'
         run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory initial-setup/azure/backend --test-directory tests
       - name: Validate and mock-test Azure starter
+        if: steps.scope.outputs.run-tests == 'true'
         run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory starter-templates/azure --test-directory tests
