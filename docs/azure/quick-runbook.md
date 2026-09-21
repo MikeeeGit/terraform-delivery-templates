@@ -53,4 +53,6 @@ Follow the [scripted removal run list](three-tier-removal.md#scripted-removal-ru
 
 ## Evidence and scope
 
+The [21 September 2026 qualification record](qualification-2026-09-21.md) lists the actual dual-slot Azure deployment, standby update, WAF cutover and traffic rollback results, along with removal evidence and remaining limits.
+
 Record public/offline checks, kind direct/Argo acceptance, actual Azure pipeline/identity/CSI/traffic results and final removal separately. The [sanitized original platform plan](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/containerization-platform-plan.md) and [requirements matrix](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/containerization-requirements.md) preserve the wider design and distinguish implemented capabilities from remaining qualification work.

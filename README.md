@@ -35,6 +35,8 @@ Apache-2.0 licensed. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md) 
 
 Start with the [three-tier dual-AKS run list](docs/azure/quick-runbook.md) for the deployment pipelines, standby update, traffic switch, rollback and complete scripted removal.
 
+The [21 September 2026 qualification record](docs/azure/qualification-2026-09-21.md) records the successful real Azure deployment, CSI access, WAF cutover/rollback and complete teardown, alongside separate public direct/Argo kind tests.
+
 For your first real Azure rehearsal, use the [sandbox deployment runbook](docs/azure/sandbox-deployment.md), including input consolidation, private access, certificate gates, costs and teardown. Follow the [hub/spoke, dual-AKS and WAF gateway scenario](docs/azure/hub-spoke-platform.md) for cross-repository deployment order, state ownership and blue/green operation. [Private network caller examples](examples/azure/hub-spoke/README.md) cover both CI platforms.
 
 

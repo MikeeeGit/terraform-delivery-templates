@@ -2,7 +2,7 @@
 
 Use this procedure after the [worked deployment](three-tier-worked-example.md), including a failed or partially completed trial. Remove Kubernetes-managed ingress resources while their controllers, nodes, identities, DNS and network still exist. Then remove dependent Terraform states in reverse dependency order. Deleting a state file is not cleanup.
 
-**Qualification status:** this removal procedure needs an actual retained Azure run before it can be described as qualified. Record every completed, failed and intentionally retained item. Use the exact subscription, resource IDs, state keys and source revisions from the deployment inventory.
+**Qualification status:** the complete direct-delivery Azure removal passed on **21 September 2026**. All 15 component states and the final migrated backend state were empty, and independent Azure inventory confirmed all 18 owned resource groups absent. See the [dated results and retained-item record](qualification-2026-09-21.md#full-removal-result). Record every completed, failed and intentionally retained item for each new trial, using its exact subscription, resource IDs, state keys and source revisions.
 
 ## Scripted removal run list
 
@@ -46,7 +46,7 @@ During the live trial, Azure DevOps briefly rejected endpoint deletion immediate
 | 1 | **freeze** | Pass every exact private lab pipeline ID with repeated --pipeline-id flags and --execute. No lab run may remain active/queued. Required policies are retained. |
 | 2 | Component removal | **aks-lab-gateway / pprd**; withdraw WAF traffic before removing its backends. |
 | 3 | **services** | Run once per slot with that slot's verified --bundle directory, a fresh --output and --execute. Add an explicit loopback --proxy-url only if using the operator SSH tunnel. |
-| 4 | Component removal, then **retire-bootstrap-pat** | **aks-lab-azure-devops-connections / hub, prd, pprd**. Keep the bootstrap PAT until these endpoints and federations are removed. Pass its recorded --authorization-id and --display-name with --execute; the helper verifies all three states are empty, revokes that exact token using delegated owner authentication, checks removal and deletes its local credential file. |
+| 4 | Component removal, then **retire-bootstrap-pat** | **aks-lab-azure-devops-connections / hub, prd, pprd**. Keep the bootstrap PAT until these endpoints and federations are removed. Pass its recorded --authorization-id and --display-name with --execute; the helper verifies all three states are empty, revokes that exact token using delegated owner authentication, confirms the revoked-token inventory and rejected PAT authentication, then deletes its local credential file. |
 | 5 | Component removal | **aks-lab-delivery-identities / prd, pprd, hub**. The retained operator owns all remaining cleanup. |
 | 6 | Component removal | **aks-lab-aks / pprd**, then **aks-lab-workload-vault / pprd**. Record the protected vault's soft-delete retention. |
 | 7 | Component removal | **aks-lab-routes / hub** while the Firewall data source and VNets still exist. |
@@ -200,9 +200,9 @@ Remove any external certificate/DNS/diagnostic resources through their actual ow
 For a component root, establish the exact helper context and verify backend first:
 
 ```bash
-cd "$WORKSPACE/aks"
+cd "$WORKSPACE/aks-lab-aks"
 source "$WORKSPACE/terraform-delivery-templates/scripts/azure/terraform-functions.sh"
-tf_setup aks pprd uks
+tf_setup aks-lab-aks pprd uks
 tf_env
 tf_init
 python3 "$WORKSPACE/terraform-delivery-templates/scripts/azure/terraform.py" verify-backend
