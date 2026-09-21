@@ -33,6 +33,21 @@ def fixture(base, component='aks-lab-firewall', environment='hub'):
 
 
 class GuardTests(unittest.TestCase):
+    def test_check_order_is_semantic_but_resource_and_serial_changes_are_not(self):
+        state = {"lineage": "same", "serial": 7, "resources": [{"value": "original"}],
+                 "check_results": [{"config_addr": "resource.example", "status": "pass",
+                                    "objects": [{"object_addr": "b", "status": "pass"},
+                                                {"object_addr": "a", "status": "pass"}]}]}
+        reordered = json.loads(json.dumps(state))
+        reordered["check_results"][0]["objects"].reverse()
+        self.assertEqual(helper.comparable_state(state), helper.comparable_state(reordered))
+        for field, value in (("serial", 8), ("lineage", "different"),
+                             ("resources", [{"value": "changed"}])):
+            changed = dict(reordered, **{field: value})
+            self.assertNotEqual(helper.comparable_state(state), helper.comparable_state(changed))
+        reordered["check_results"][0]["objects"][0]["status"] = "fail"
+        self.assertNotEqual(helper.comparable_state(state), helper.comparable_state(reordered))
+
     def test_fixed_whitelist_and_bootstrap_excluded(self):
         for component, environments in helper.TARGETS.items():
             for environment in environments:

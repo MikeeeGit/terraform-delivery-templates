@@ -49,6 +49,22 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def comparable_state(state):
+    """Ignore only Terraform's unordered check-result serialization.
+
+    Resource instances, values, lineage and serial remain exact comparisons.
+    Terraform state pull can reorder check objects without changing the blob.
+    """
+    result = json.loads(json.dumps(state))
+    checks = result.get("check_results")
+    if isinstance(checks, list):
+        for check in checks:
+            if isinstance(check.get("objects"), list):
+                check["objects"].sort(key=lambda item: json.dumps(item, sort_keys=True))
+        checks.sort(key=lambda item: json.dumps(item, sort_keys=True))
+    return result
+
+
 def regular(path):
     require(not path.is_symlink() and path.is_file(), 'Expected a regular, non-symlink input: ' + str(path))
     return path.read_bytes()
@@ -461,7 +477,7 @@ def plan_one(binding, output, expected_hash, operation="destroy"):
     write_private(output / 'state-after.tfstate', after)
     metadata_after = blob_metadata(backend, work, env, output / 'blob-after.json')
     require(metadata_after.get('properties', {}).get('lease', {}).get('status') == 'unlocked', 'State remains leased after planning; saved plan is not qualified and no unlock is attempted')
-    require(after_info == before_info and json.loads(after) == json.loads(before), 'State changed during planning; do not use this saved plan')
+    require(after_info == before_info and comparable_state(json.loads(after)) == comparable_state(json.loads(before)), 'State changed during planning; do not use this saved plan')
     require(inventory(binding['component'], binding['environment']) == binding, 'Original source changed during planning; review again before any separate apply')
     receipt = {'operation': operation, 'component': binding['component'], 'environment': binding['environment'], 'source_sha256': binding['source_sha256'], 'backend': backend, 'terraform_version': version['terraform_version'], 'state': before_info, 'plan_sha256': digest(regular(saved_plan)), 'state_before_sha256': digest(before), 'state_after_sha256': digest(after), 'delete_addresses': deletes, 'resource_apply_performed': False, 'state_migration_performed': False, 'status': 'destroy-plan-ready-for-independent-review'}
     write_private(output / 'receipt.json', json.dumps(receipt, indent=2) + '\n')
@@ -523,7 +539,7 @@ def apply_one(binding, output, expected_plan):
             and info.get("user", {}).get("type") == "user", "Wrong cleanup operator account")
     current = run([str(TERRAFORM), "state", "pull"], work, env, "Pre-apply state snapshot")
     validate_state(json.loads(current), binding["component"], binding["environment"])
-    require(json.loads(current) == json.loads(regular(output / "state-after.tfstate")), "State changed since reviewed plan; re-plan")
+    require(comparable_state(json.loads(current)) == comparable_state(json.loads(regular(output / "state-after.tfstate"))), "State changed since reviewed plan; re-plan")
     plan = json.loads(run([str(TERRAFORM), "show", "-json", str(saved)], work, env, "Recheck saved plan"))
     require(validate_plan(plan, binding["component"], binding["environment"]) == receipt["delete_addresses"], "Saved delete set changed")
     if binding["component"] == CONNECTIONS:
