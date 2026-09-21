@@ -116,9 +116,9 @@ def apply(output, expected):
     tf.require(cache["type"] == "local" and cache["config"]["path"] == receipt["local_backend_path"], "Do not delete the active remote backend")
     before = json.loads(tf.run([str(tf.TERRAFORM), "state", "pull"], work, env, "Local recovery check"))
     tf.require(before["lineage"] == receipt["lineage"] and validate_bootstrap(before) == receipt["managed_count"], "Local recovery changed")
-    result = subprocess.run([str(tf.TERRAFORM), "apply", "-input=false", "-lock=true", "-lock-timeout=60s", "-no-color", str(saved)],
-                            cwd=work, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    tf.write_private(output / "apply.log", result.stdout)
+    with open(output / "apply.log", "xb", opener=lambda name, flags: os.open(name, flags, 0o600)) as log:
+        result = subprocess.run([str(tf.TERRAFORM), "apply", "-input=false", "-lock=true", "-lock-timeout=60s", "-no-color", str(saved)],
+                                cwd=work, env=env, stdout=log, stderr=subprocess.STDOUT)
     after = tf.run([str(tf.TERRAFORM), "state", "pull"], work, env, "Final local recovery snapshot")
     tf.write_private(output / "state-final.tfstate", after)
     remaining = validate_bootstrap(json.loads(after))

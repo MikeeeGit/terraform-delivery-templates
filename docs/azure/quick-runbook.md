@@ -6,7 +6,7 @@ The disposable Azure profile uses one selected subscription, UK South, a hub and
 
 ## First-time setup
 
-1. Select the subscription, unique storage/registry names, quota and supported AKS version. Set a spending limit and removal time.
+1. Select the subscription, unique storage/registry names, quota and supported AKS version. Set a budget alert and removal time; an Azure budget alert does not stop spending.
 2. Create private component consumers, protected main branches, manual pipelines and approval environments. Pin shared libraries to reviewed full commits.
 3. Apply backend bootstrap as the retained operator, migrate its state to the operator-only container, and apply the hub network/ACR with peerings disabled.
 4. Apply separate delivery identities, scoped grants and service connections/FICs for the actual pipeline IDs.

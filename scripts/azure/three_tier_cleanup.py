@@ -45,7 +45,7 @@ def kube_context(receipt, output, proxy):
              "--file", str(kubeconfig), "--format", "exec"], env)
     kubeconfig.chmod(0o600)
     command(["kubelogin", "convert-kubeconfig", "--login", "azurecli", "--kubeconfig", str(kubeconfig)], env)
-    base = ["kubectl", "--kubeconfig", str(kubeconfig)]
+    base = ["kubectl", "--kubeconfig", str(kubeconfig), "--request-timeout=30s"]
     if proxy:
         url = urllib.parse.urlsplit(proxy)
         tf.require(url.scheme == "socks5" and url.hostname in ("127.0.0.1", "::1")

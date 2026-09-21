@@ -10,6 +10,7 @@ import sys
 import three_tier_teardown as tf
 import three_tier_cleanup as cluster
 import three_tier_retire_backend as backend
+import three_tier_retire_token as token
 
 ORDER = [
     "Freeze this lab's manual pipelines and retain evidence/operator access.",
@@ -133,7 +134,7 @@ def main(argv=None):
     if not args or args[0] in ("list","--help","-h"):
         print(__doc__)
         print("\n".join(f"{i}. {item}" for i,item in enumerate(ORDER,1)))
-        print("\nActions: freeze, inventory, plan, detach-plan, apply, services, unregister-agent, backend-plan, backend-apply, verify")
+        print("\nActions: freeze, inventory, plan, detach-plan, apply, services, retire-bootstrap-pat, unregister-agent, backend-plan, backend-apply, verify")
         print("Pass --help after an action to see its exact inputs. No action runs implicitly.")
         return
     action=args.pop(0)
@@ -141,6 +142,8 @@ def main(argv=None):
         tf.main(["--mode",action,*args])
     elif action=="services":
         cluster.main(["--phase","services",*args])
+    elif action=="retire-bootstrap-pat":
+        token.main(args)
     elif action in ("backend-plan","backend-apply"):
         backend.main(["--mode",action.removeprefix("backend-"),*args])
     elif action=="verify":

@@ -546,10 +546,10 @@ def apply_one(binding, output, expected_plan):
         private_path(PAT_FILE)
         env["AZDO_PERSONAL_ACCESS_TOKEN"] = regular(PAT_FILE).decode().strip()
         env["AZDO_ORG_SERVICE_URL"] = ORGANIZATION
-    result = subprocess.run([str(TERRAFORM), "apply", "-input=false", "-lock=true",
-                             "-lock-timeout=60s", "-no-color", str(saved)],
-                            cwd=work, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    write_private(output / "apply.log", result.stdout)
+    with open(output / "apply.log", "xb", opener=lambda name, flags: os.open(name, flags, 0o600)) as log:
+        result = subprocess.run([str(TERRAFORM), "apply", "-input=false", "-lock=true",
+                                 "-lock-timeout=60s", "-no-color", str(saved)],
+                                cwd=work, env=env, stdout=log, stderr=subprocess.STDOUT)
     status = {"component": binding["component"], "environment": binding["environment"],
               "plan_sha256": expected_plan, "returncode": result.returncode, "status": "failed"}
     if result.returncode == 0:
