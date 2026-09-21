@@ -28,7 +28,7 @@ Choose the corresponding private caller in your project. Save each successful ru
 | 6 — handoff | Generate configuration | Run three_tier_handoff.py against actual wrapped Terraform outputs; commit the private platform/app bindings. |
 | 7 — access | Discover identities | Observe platform and application Kubernetes identities on each slot. Bootstrap platform access as the retained operator. |
 | 8 — platform | Platform services | Select **clusterSlots: [aks01, aks02]** and **deploySequentially: true**. Install Gateway API/Envoy and private TLS listener prerequisites. |
-| 9 — platform | Application bootstrap | Select **clusterSlots: [aks01, aks02]**. Establish namespace/native application RBAC and verify CSI prerequisites. |
+| 9 — platform | Application bootstrap | Select **clusterSlots: [aks01, aks02]**. Use the bootstrap-only service connection bound to the declared platform MI; establish namespace/native application RBAC and verify CSI prerequisites. |
 | 10 — application | Image build | Build/test/push once; require the immutable scan to pass. Record build run ID, definition ID and receipt artifact name. |
 | 11 — application | Promote selected build | Select that build, **clusterSlots: [aks01, aks02]**, **deploySequentially: true**. Approve each rendered bundle; both slots must report the same image/revision. |
 | 12 — cloud traffic | Application Gateway | Apply WAF/TLS after its certificate prerequisites. Verify actual provisioning, backend health and HTTPS through WAF. |

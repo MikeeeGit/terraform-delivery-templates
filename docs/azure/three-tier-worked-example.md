@@ -209,7 +209,9 @@ Repeat for aks02 after reviewing the first result. This explicit binding gives t
 
 Deploy platform services next: copy shared `examples/github-platform.yml` or `examples/azure-platform.yml` into the platform consumer, aligning every reference to the reviewed shared commit. Deploy both slots sequentially through the actual platform CI identity. It prepares/reviews the receipt, installs CRDs/controllers and creates platform-owned ServiceAccounts, Gateways and proxies. [Platform services](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-services.md) documents exact local prepare/apply commands for diagnosis.
 
-Populate `bootstrap.native.apps.json` from application discovery and the actual Pod Security minor, then commit it. Run the protected application-bootstrap caller for both slots using its dedicated bootstrap identity. This was the Azure trial's pipeline route. The authorised operator can perform the equivalent operation locally:
+Populate `bootstrap.native.apps.json` from application discovery and the actual Pod Security minor, then commit it. Run the protected application-bootstrap caller for both slots. In the tested Azure DevOps profile, its **dedicated bootstrap service connection uses the same Terraform-declared platform managed identity** that received the native platform binding above. Authorize that connection only for the intended namespace-bootstrap pipelines and protect the separate `bootstrap-pprd-uks-aks01/aks02` approval environments. The application deploy connection still uses the separate namespace-scoped application identity.
+
+A separate bootstrap managed identity is an optional design change: declare its own Terraform Cluster User access, observe its actual Kubernetes username and explicitly bind that platform-purpose principal before using it. Creating another connection does not create those grants automatically. The authorised operator can perform the tested namespace-bootstrap operation locally:
 
 ```bash
 SOURCE_COMMIT=$(git rev-parse HEAD)

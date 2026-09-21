@@ -58,6 +58,8 @@ The retained final inventory report has SHA-256 **274f74f5c55c1f1c47065a03e96a89
 
 The kind tests exercise real disposable Kubernetes controllers and the selected delivery engines, including promotion, traffic selection, rollback and cleanup. They do not exercise Azure federation, CSI, private DNS or WAF; the separate Azure results above provide that evidence for the direct-delivery profile.
 
+A subsequent Azure-hosted kind repeat exposed an Argo bootstrap race: a new CRD had no status conditions yet, and the client wait exited immediately. Shared revision **f0034fd0f5a4f56271c514c439ca0e3795c56aae** adds a bounded establishment check, with regression coverage for missing/null conditions, timeout, rejected definitions and API failures. At application revision **aaf16f8fca87b416c9281dd2a9f01eb2d202e648**, both full paths passed again: direct **3m54s**, Argo **8m19s**. [Corrected full acceptance run](https://github.com/MikeeeGit/aks-platform-demo/actions/runs/35662634790). The [Argo troubleshooting guide](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/argocd-troubleshooting.md#stalled-sync-missing-crds-or-immutable-fields) records the diagnosis. This correction does not change the earlier direct-Azure deployment or teardown results.
+
 ## Findings incorporated into the maintained code
 
 - **Image scanning needs sufficient writable disk.** The real scan exposed an undersized temporary filesystem. The scanner now uses an isolated runner-disk cache, the runner UID and read-only registry credentials, without mounting the Docker socket.
