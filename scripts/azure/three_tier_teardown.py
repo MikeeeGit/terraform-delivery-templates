@@ -277,9 +277,14 @@ def write_private(path, data):
 
 
 def run(command, cwd, env, stage, allowed=(0,)):
-    # Never print command output or save raw subprocess diagnostics: providers may echo private values.
+    # Providers may echo private values; diagnostics stay in protected recovery storage.
     result = subprocess.run(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    require(result.returncode in allowed, f'{stage} failed (exit {result.returncode}); no resource apply was attempted')
+    if result.returncode not in allowed:
+        output = Path(env["TF_DATA_DIR"]).parent
+        require(output.resolve().is_relative_to(PRIVATE.resolve()), "Diagnostic output escapes private recovery storage")
+        number = len(list(output.glob("command-failure-*.log")))
+        write_private(output / f"command-failure-{number}.log", result.stdout + b"\n" + result.stderr)
+        raise ValueError(f"{stage} failed (exit {result.returncode}); inspect private command-failure-{number}.log and current state")
     return result.stdout
 
 
