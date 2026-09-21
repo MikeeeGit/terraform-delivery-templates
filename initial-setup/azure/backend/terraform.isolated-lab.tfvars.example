@@ -1,0 +1,8 @@
+# Synthetic isolated lab. Replace IDs, globally unique storage prefix and allowed IP.
+subscription_id            = "00000000-0000-0000-0000-000000000002"
+tenant_id                  = "00000000-0000-0000-0000-000000000001"
+prefix                     = "akslab01"
+resource_group_name_prefix = "aks-lab"
+secondary_region           = "uks"
+location                   = "uksouth"
+administrator_ipv4         = ["203.0.113.10"]

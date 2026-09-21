@@ -10,6 +10,8 @@ The Azure deployment consists of infrastructure, cluster platform services and a
 
 The workload identity is used by Pods to access Key Vault. The application deployment identity authenticates CI to the Kubernetes API. They are separate identities even when their names refer to the same application/environment. The platform identity has a separate responsibility for controllers and cluster resources. A kubelet identity pulls images; annotating an application ServiceAccount does not grant registry pull access to the nodes.
 
+For the full deployment, traffic switch and removal sequence, follow the [worked Azure procedure](three-tier-worked-example.md) and [removal procedure](three-tier-removal.md). The [disposable kind worked example](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/WORKED-EXAMPLE.md) exercises the shared Kubernetes engines with a local infrastructure adapter.
+
 ## 1. Create the private consumers and configuration
 
 Use the [Azure sandbox deployment](sandbox-deployment.md) for hub/spoke networking, firewall/UDR/DNS, quota, private workers, certificates and Application Gateway WAF. Keep those prerequisites and traffic cutover gates. This guide adds the identity lifecycle and generated application/platform bindings.
@@ -93,7 +95,7 @@ Run the native namespace bootstrap as an already authorised Entra operator. It c
 
 Install the maintained platform profile using the existing prepare/apply lifecycle and generated platform configuration. This installs pinned Gateway API/Envoy CRDs, controllers, both slot-specific proxies/Gateways and the workload ServiceAccount. The workload's first CSI mount supplies the TLS Secret, so full Gateway/HTTPS acceptance follows application rollout.
 
-**Initial platform authority:** this native profile currently requires pre-existing, separately reviewed Kubernetes privileges for an unattended platform CI identity. Its bootstrap does not create a persistent cluster-admin binding for that pipeline. An authorised operator can run the platform lifecycle. Do not describe Cluster User as sufficient platform authority or claim unattended platform reconstruction until that privilege has been provided and tested. All application-role resources and Azure identity/grant resources described above are executable code.
+**Initial platform authority:** follow the [platform CI bootstrap](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-ci-bootstrap.md). An existing Entra administrator explicitly opts in to bind only the Terraform-declared platform identity on the selected slots, after matching real identity-discovery records. The guarded command uses user credentials and supports explicit subject revocation. The platform pipeline can then run the maintained lifecycle; build/application identities retain their separate scopes. Cluster User alone does not provide Kubernetes write permissions. The initial operator/group and private connectivity remain prerequisites.
 
 The existing Azure RBAC path remains available. Its custom-resource ABAC recipe is an explicit preview option and must not be silently replaced with unrestricted app permissions. Do not run two grant owners against the same resources.
 

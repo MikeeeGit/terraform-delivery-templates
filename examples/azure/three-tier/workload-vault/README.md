@@ -57,3 +57,11 @@ terraform test
 Provider mocks cover private-only RBAC configuration, purge protection, exact endpoint/DNS dependencies, explicit administrator grants and rejection of unrelated zone/subscription inputs. They do not prove tenant policy, role propagation, endpoint approval, private DNS reachability or CSI access.
 
 Purge protection cannot be disabled after enabling it. The default soft-delete retention is 90 days; choose an explicit 7-90 day value before creation. Deleting a sandbox vault does not immediately release its name or permit purging it. Plan retention and recovery alongside private state; never delete state to bypass a failed destroy or name conflict.
+
+## Remove the private trial
+
+Follow [ordered three-tier removal](../../../../docs/azure/three-tier-removal.md) after withdrawing traffic and removing the dependent application, platform load balancers and AKS workload identity grants. Keep the private network, cleanup identity and Terraform backend available until this root's reviewed destroy completes.
+
+The provider explicitly sets `key_vault.purge_soft_delete_on_destroy = false`. Terraform therefore requests soft deletion instead of a permanent purge while the resource's `purge_protection_enabled = true` remains intact. Retain the final state and deleted-vault metadata/expiry privately. Deletion does not immediately release the globally unique vault name; recover the original through a reviewed state/ownership procedure, use a fresh trial name, or wait for retention. Never disable protection or discard state to force teardown. See the [AzureRM feature reference](https://github.com/hashicorp/terraform-provider-azurerm/blob/v4.81.0/website/docs/guides/features-block.html.markdown) and [Microsoft recovery guidance](https://learn.microsoft.com/en-us/azure/key-vault/general/key-vault-recovery).
+
+Remove the endpoint and its DNS zone group through this state. Hub DNS zones and spoke subnet/VNet links belong to the network states and must remain until their other consumers are gone.

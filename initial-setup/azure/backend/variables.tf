@@ -50,3 +50,15 @@ variable "tags" {
   type        = map(string)
   default     = { purpose = "terraform-state", managed_by = "terraform" }
 }
+
+
+variable "resource_group_name_prefix" {
+  description = "Optional isolated backend resource-group qualifier after region/environment; empty preserves existing names. Does not alter storage account names."
+  type        = string
+  default     = ""
+  nullable    = false
+  validation {
+    condition     = var.resource_group_name_prefix == "" || can(regex("^([a-z]|[a-z][a-z0-9-]{0,18}[a-z0-9])$", var.resource_group_name_prefix))
+    error_message = "resource_group_name_prefix must be empty or 1-20 lowercase letters/digits/hyphens, starting with a letter and ending alphanumeric."
+  }
+}

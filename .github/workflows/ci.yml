@@ -50,3 +50,6 @@ jobs:
       - name: Validate and mock-test private workload vault
         if: steps.scope.outputs.run-tests == 'true'
         run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory examples/azure/three-tier/workload-vault --test-directory tests
+      - name: Validate and mock-test disposable private worker
+        if: steps.scope.outputs.run-tests == 'true'
+        run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory examples/azure/three-tier/private-worker --test-directory tests

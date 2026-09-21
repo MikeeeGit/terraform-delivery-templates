@@ -21,7 +21,7 @@ variables {
 run "backend_contract" {
   command = plan
   assert {
-    condition     = output.backends["pprd"].storage_account_name == "ukwpprdexampletfstatesa" && output.backends["pprd"].container_name == "ukw-pprd-azdo-tfstate"
+    condition     = output.backends["pprd"].storage_account_name == "ukwpprdexampletfstatesa" && output.backends["pprd"].container_name == "ukw-pprd-azdo-tfstate" && output.backends["pprd"].resource_group_name == "ukw-pprd-tfstate-rsg"
     error_message = "Bootstrap names must match the delivery.azure.json contract."
   }
   assert {
@@ -42,4 +42,35 @@ run "reject_oversized_region_combination" {
     secondary_region = "longregion"
   }
   expect_failures = [var.prefix]
+}
+
+run "isolated_backend_groups_preserve_account_and_container_contract" {
+  command = plan
+  variables {
+    resource_group_name_prefix = "aks-lab"
+  }
+  assert {
+    condition     = output.backends["pprd"].resource_group_name == "ukw-pprd-aks-lab-tfstate-rsg" && output.backends["hub"].resource_group_name == "ukw-hub-aks-lab-tfstate-rsg"
+    error_message = "Explicit isolation must qualify every backend resource group."
+  }
+  assert {
+    condition     = output.backends["pprd"].storage_account_name == "ukwpprdexampletfstatesa" && output.backends["pprd"].container_name == "ukw-pprd-azdo-tfstate" && azurerm_storage_account.state["pprd"].resource_group_name == output.backends["pprd"].resource_group_name
+    error_message = "Isolated resource groups must reach storage while preserving independent account/container names."
+  }
+}
+
+run "reject_invalid_backend_group_qualifier" {
+  command = plan
+  variables {
+    resource_group_name_prefix = "AKS/Lab"
+  }
+  expect_failures = [var.resource_group_name_prefix]
+}
+
+run "reject_oversized_backend_group_qualifier" {
+  command = plan
+  variables {
+    resource_group_name_prefix = "abcdefghijklmnopqrstu"
+  }
+  expect_failures = [var.resource_group_name_prefix]
 }

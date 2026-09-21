@@ -34,3 +34,5 @@ steps:
     displayName: Validate and mock-test Azure DevOps connections
   - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory examples/azure/three-tier/workload-vault --test-directory tests
     displayName: Validate and mock-test private workload vault
+  - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory examples/azure/three-tier/private-worker --test-directory tests
+    displayName: Validate and mock-test disposable private worker

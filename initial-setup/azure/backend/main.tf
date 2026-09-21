@@ -26,7 +26,7 @@ data "azurerm_client_config" "current" {}
 
 resource "azurerm_resource_group" "state" {
   for_each = var.backend_environments
-  name     = "${var.secondary_region}-${each.key}-tfstate-rsg"
+  name     = "${join("-", compact([var.secondary_region, each.key, var.resource_group_name_prefix]))}-tfstate-rsg"
   location = var.location
   tags     = var.tags
 }

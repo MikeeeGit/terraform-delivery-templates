@@ -1,0 +1,25 @@
+# Synthetic input only. Replace all applied IDs and supply your own public SSH key.
+tenant_id       = "00000000-0000-0000-0000-000000000001"
+subscription_id = "00000000-0000-0000-0000-000000000003"
+location        = "uksouth"
+name_prefix     = "uks-pprd-example-worker"
+subnet_id       = "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/hub-rg/providers/Microsoft.Network/virtualNetworks/hub/subnets/shared"
+image_version   = "22.04.202608060" # Recheck availability and pin a reviewed version.
+vm_size         = "Standard_D2s_v4"
+
+# No public IP or inbound access by default.
+operator_ssh_cidr = null
+# Optional: reviewed single public IPv4 only, e.g. "203.0.113.10/32".
+# This is a documentation-only address, not a working operator endpoint.
+
+# Required out-of-band input: TF_VAR_admin_ssh_public_key from your .pub file.
+enable_managed_identity = false
+identity_state_roles    = {}
+
+blob_private_endpoints = {
+  state = {
+    storage_account_id  = "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/backend-rg/providers/Microsoft.Storage/storageAccounts/examplestate"
+    subnet_id           = "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/hub-rg/providers/Microsoft.Network/virtualNetworks/hub/subnets/private-endpoints"
+    private_dns_zone_id = "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/hub-rg/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
+  }
+}
