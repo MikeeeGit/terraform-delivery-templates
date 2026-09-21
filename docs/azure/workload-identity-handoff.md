@@ -21,3 +21,7 @@ The helper rejects an unrelated identity subscription/tenant, malformed identity
 Review `service_account_manifest` and commit its content in the intended application's overlay. Copy only the generated `clientID`, `tenantId` and `usePodIdentity` values into its SecretProviderClass; configure the real vault and object references separately. Pods also need the exact ServiceAccount, workload identity label and CSI volume mount. A TLS `SecretProviderClass` must synchronize both `tls.key` and `tls.crt` from certificate secret material and have a live mounting consumer. The helper deliberately does not patch unrelated files or export secret values.
 
 Follow the [AKS TLS profile](https://github.com/MikeeeGit/azure-aks-foundation/blob/main/examples/ingress-tls/README.md) and the chosen application's controller profile. Verify live vault permissions, CSI custom-resource authorization, network/DNS reachability and certificate rotation separately. Never assume a successful metadata export proves those prerequisites.
+
+## Complete application/platform handoff
+
+For the maintained Azure workload sample, [three-tier handoff](three-tier-azure-deployment.md#3-generate-the-platformapplication-identity-bindings) generates both platform ServiceAccount declarations, application identity/CSI patches and the real-Azure expected contract from the same applied identity. The original metadata-only helper remains available for other consumers.

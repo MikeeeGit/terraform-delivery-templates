@@ -6,6 +6,8 @@ The application has two delivery options: the existing pipeline applies Kustomiz
 
 This is a paid, explicitly selected sandbox operation. The published examples contain synthetic values and are not ready to apply unchanged. Credential-free tests do not demonstrate your Azure permissions, quota, private networking, managed CSI or WAF path. Record actual evidence at each gate below.
 
+For state-managed CI identities, service connections, native application permissions and generated workload bindings, follow the [three-tier Azure deployment guide](three-tier-azure-deployment.md) alongside this network and traffic runbook. Its Azure workload profile adds an actual Key Vault CSI qualification gate; it retains the explicit first-platform-authority boundary.
+
 ## 1. Decide scope, cost and access before provisioning
 
 For the complete example, deploy the hub plus PPRD and PRD **networks**, but start with only the PPRD **AKS pair** and gateway. The current hub peerings and route-only add-on explicitly reference both spoke networks; omitting PRD requires a deliberate private configuration change, not just skipping its apply. UK West recovery workloads are outside this rehearsal. Both slots are in one region; they are upgrade/deployment slots, not regional disaster recovery.
@@ -68,7 +70,7 @@ For an existing serving HTTP deployment use the separate candidate/cutover profi
 
 Follow [backend bootstrap](bootstrap.md): begin with local state, create private Entra-authenticated storage, then migrate the existing state using the supplied helper. Retain protected recovery copies. Choose globally unique storage/ACR names and real allowed egress addresses. State migration and role propagation are independent gates.
 
-Configure private CI consumers or use the local operator path. YAML does not create service connections, OIDC trust, approval reviewers, protected environments or private workers. Review the [private component callers](../../examples/azure/component/README.md), [GitHub setup](github-actions.md) and [Azure DevOps setup](azure-devops.md). Separate plan/apply, registry build, platform/bootstrap, ordinary app and workload identities. An Azure Contributor role alone does not grant role-assignment or storage data access.
+Configure private CI consumers or use the local operator path. The [state-managed identity and connection roots](three-tier-azure-deployment.md) create CI UAMIs, OIDC trust, Azure role assignments and Azure DevOps service connections. Configure approval reviewers, protected environments and private worker access separately. Review the [private component callers](../../examples/azure/component/README.md), [GitHub setup](github-actions.md) and [Azure DevOps setup](azure-devops.md). Separate plan/apply, registry build, platform/bootstrap, ordinary app and workload identities. An Azure Contributor role alone does not grant role-assignment or storage data access.
 
 The public network pack reserves `GatewaySubnet` and hub `shared`; it provisions neither VPN/ExpressRoute connectivity nor a runner VM. Establish a trusted management/worker path with private AKS DNS/routing before Kubernetes operations. A VM in the hub shared subnet or an existing correctly routed private worker is an operator-owned option; its provisioning, hardening and removal must be included in the trial inventory. Never place a diagnostic VM in the dedicated firewall or Application Gateway subnets. Keep public PR jobs on credential-free hosted workers.
 

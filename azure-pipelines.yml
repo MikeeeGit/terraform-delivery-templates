@@ -28,3 +28,9 @@ steps:
     displayName: Validate and mock-test backend bootstrap
   - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory starter-templates/azure --test-directory tests
     displayName: Validate and mock-test Azure starter
+  - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory initial-setup/azure/delivery-identities --test-directory tests
+    displayName: Validate and mock-test CI identities
+  - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory initial-setup/azure/azure-devops-connections --test-directory tests
+    displayName: Validate and mock-test Azure DevOps connections
+  - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory examples/azure/three-tier/workload-vault --test-directory tests
+    displayName: Validate and mock-test private workload vault

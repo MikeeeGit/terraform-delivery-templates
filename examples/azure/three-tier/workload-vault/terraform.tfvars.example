@@ -1,0 +1,12 @@
+tenant_id       = "00000000-0000-0000-0000-000000000001"
+subscription_id = "00000000-0000-0000-0000-000000000003"
+environment     = "pprd"
+region          = "uks"
+location        = "uksouth"
+name_prefix     = "example"
+vault_name      = "example-platform-app"
+private_endpoint_subnet_id = "/subscriptions/00000000-0000-0000-0000-000000000003/resourceGroups/uks-pprd-example-vnet-rg/providers/Microsoft.Network/virtualNetworks/uks-pprd-example-vnet/subnets/private-endpoints"
+private_dns_zone_id        = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/uks-hub-example-vnet-rg/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+secret_administrator_object_ids = {
+  operators = "00000000-0000-0000-0000-000000000031"
+}

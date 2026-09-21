@@ -41,3 +41,12 @@ jobs:
       - name: Validate and mock-test Azure starter
         if: steps.scope.outputs.run-tests == 'true'
         run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory starter-templates/azure --test-directory tests
+      - name: Validate and mock-test CI identities
+        if: steps.scope.outputs.run-tests == 'true'
+        run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory initial-setup/azure/delivery-identities --test-directory tests
+      - name: Validate and mock-test Azure DevOps connections
+        if: steps.scope.outputs.run-tests == 'true'
+        run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory initial-setup/azure/azure-devops-connections --test-directory tests
+      - name: Validate and mock-test private workload vault
+        if: steps.scope.outputs.run-tests == 'true'
+        run: python3 scripts/validate.py --source-root "$GITHUB_WORKSPACE" --directory examples/azure/three-tier/workload-vault --test-directory tests

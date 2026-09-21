@@ -22,3 +22,7 @@ Requirements: pinned Terraform, Azure CLI, Python 3.10+, Azure access to the sel
 The examples are not deployable credentials. Account names must be globally unique and no longer than 24 characters. Preserve generated state, plan and migration files privately; keep provider lockfiles with the deployment configuration.
 
 These helpers do not run automatically from public CI and do not alter existing applications or infrastructure merely by being cloned. See the guide for exact commands, external CI configuration, permissions and recovery boundaries.
+
+## State-managed CI identity lifecycle
+
+Use [delivery-identities](delivery-identities/README.md) for repeatable per-environment CI UAMIs, GitHub federation and role assignments. Add [azure-devops-connections](azure-devops-connections/README.md) for state-managed service endpoints and exact pipeline authorisations. The older create-once federation helper remains available for its existing app-registration workflow; do not let it and Terraform manage the same identity or grants.

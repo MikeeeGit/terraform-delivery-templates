@@ -1,0 +1,50 @@
+# Replace synthetic owner/repository IDs with the exact OIDC repository segment.
+# Synthetic PPRD example. Use a separate state and inputs for each environment.
+tenant_id       = "00000000-0000-0000-0000-000000000001"
+subscription_id = "00000000-0000-0000-0000-000000000003"
+environment     = "pprd"
+region          = "uks"
+location        = "uksouth"
+name_prefix     = "example"
+identities = {
+  plan = {
+    purpose = "terraform-plan"
+    github_environments = { plan = { repository = "example-org@10000001/platform-infrastructure@20000001", environment = "pprd-uks-plan" } }
+    role_assignments = {
+      read = { scope = "/subscriptions/00000000-0000-0000-0000-000000000003", role_definition_name = "Reader" }
+      state = { scope = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/state-rg/providers/Microsoft.Storage/storageAccounts/examplestate/blobServices/default/containers/pprd", role_definition_name = "Storage Blob Data Contributor" }
+    }
+  }
+  apply = {
+    purpose = "terraform-apply"
+    github_environments = { apply = { repository = "example-org@10000001/platform-infrastructure@20000001", environment = "pprd-uks-apply" } }
+    role_assignments = {
+      resources = { scope = "/subscriptions/00000000-0000-0000-0000-000000000003", role_definition_name = "Contributor" }
+      # This principal can manage permissions in this subscription. Scope more
+      # narrowly, or add reviewed delegation conditions, for shared subscriptions.
+      access = { scope = "/subscriptions/00000000-0000-0000-0000-000000000003", role_definition_name = "Role Based Access Control Administrator" }
+      state = { scope = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/state-rg/providers/Microsoft.Storage/storageAccounts/examplestate/blobServices/default/containers/pprd", role_definition_name = "Storage Blob Data Contributor" }
+    }
+  }
+  build = {
+    purpose = "build"
+    github_environments = { build = { repository = "example-org@10000001/platform-application@20000002", environment = "pprd-image-build" } }
+    role_assignments = {
+      registry = { scope = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/hub-rg/providers/Microsoft.ContainerRegistry/registries/exampleplatformacr", role_definition_name = "AcrPush" }
+    }
+  }
+  platform = {
+    purpose = "platform"
+    github_environments = {
+      aks01 = { repository = "example-org@10000001/platform-services@20000003", environment = "platform-pprd-uks-aks01" }
+      aks02 = { repository = "example-org@10000001/platform-services@20000003", environment = "platform-pprd-uks-aks02" }
+    }
+  }
+  application = {
+    purpose = "application"
+    github_environments = {
+      aks01 = { repository = "example-org@10000001/platform-application@20000002", environment = "pprd-uks-aks01" }
+      aks02 = { repository = "example-org@10000001/platform-application@20000002", environment = "pprd-uks-aks02" }
+    }
+  }
+}

@@ -41,3 +41,7 @@ Application delivery is provided by [AKS Delivery Templates](https://github.com/
 ## CI change scope
 
 Markdown-only edits use lightweight required GitHub checks and are excluded from automatic Azure validation builds. Changes to Terraform, application code, scripts, workflow definitions or executable examples still run full validation, including examples stored under docs/. Mixed changes also run full validation. Manual GitHub runs and unknown Git comparison ranges default to full validation.
+
+## Three-tier Azure identity lifecycle
+
+The [three-tier Azure deployment guide](docs/azure/three-tier-azure-deployment.md) connects Terraform-managed CI identities and service connections, AKS workload federation and role assignments, platform bootstrap, and full dual-slot application delivery. It includes generated identity handoffs and a real Azure CSI qualification profile alongside the existing disposable tests.
