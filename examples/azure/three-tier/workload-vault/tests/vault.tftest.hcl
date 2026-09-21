@@ -101,7 +101,7 @@ run "trusted_services_opt_in_preserves_other_boundaries" {
       azurerm_key_vault.workload.purge_protection_enabled &&
       azurerm_private_endpoint.vault.private_service_connection[0].subresource_names == tolist(["vault"]) &&
       length(azurerm_role_assignment.secret_administrator) == 0 &&
-      length(azurerm_role_assignment.certificate_seed_operator) == 0)
+    length(azurerm_role_assignment.certificate_seed_operator) == 0)
     error_message = "Trusted-service opt-in must not enable public access, remove private connectivity/protection or add identity grants."
   }
 }
