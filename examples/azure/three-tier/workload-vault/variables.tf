@@ -67,6 +67,17 @@ variable "secret_administrator_object_ids" {
     error_message = "Use distinct Entra object UUIDs for secret administration."
   }
 }
+variable "certificate_seed_operator_object_ids" {
+  description = "Optional existing operator/group/service-principal object IDs granted Certificates Officer only at this vault for frontend certificate import/rotation. Empty means no certificate administrator grant."
+  type        = set(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition = (alltrue([for id in var.certificate_seed_operator_object_ids : can(regex("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$", id))]) &&
+    length(distinct([for id in var.certificate_seed_operator_object_ids : lower(id)])) == length(var.certificate_seed_operator_object_ids))
+    error_message = "Use distinct Entra object UUIDs for certificate seeding; an empty set grants no certificate administration."
+  }
+}
 variable "soft_delete_retention_days" {
   type    = number
   default = 90

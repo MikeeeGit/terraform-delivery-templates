@@ -6,3 +6,7 @@ resource_group_name_prefix = "aks-lab"
 secondary_region           = "uks"
 location                   = "uksouth"
 administrator_ipv4         = ["203.0.113.10"]
+
+# Keep bootstrap/identity-grant state outside component CI container grants.
+operator_state_container_name = "aks-lab-bootstrap"
+operator_state_environment    = "hub"

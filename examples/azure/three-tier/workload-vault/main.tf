@@ -70,6 +70,12 @@ resource "azurerm_role_assignment" "secret_administrator" {
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = each.value
 }
+resource "azurerm_role_assignment" "certificate_seed_operator" {
+  for_each             = var.certificate_seed_operator_object_ids
+  scope                = azurerm_key_vault.workload.id
+  role_definition_name = "Key Vault Certificates Officer"
+  principal_id         = each.value
+}
 output "vault" {
   description = "Non-secret environment vault and endpoint metadata. Feed id to AKS workload roles and the application handoff."
   value = {

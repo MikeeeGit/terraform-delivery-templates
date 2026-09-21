@@ -86,3 +86,23 @@ output "backends" {
     }
   }
 }
+
+resource "azurerm_storage_container" "operator" {
+  count                 = var.operator_state_container_name == null ? 0 : 1
+  name                  = var.operator_state_container_name
+  storage_account_id    = azurerm_storage_account.state[var.operator_state_environment].id
+  container_access_type = "private"
+  depends_on            = [azurerm_role_assignment.bootstrap_blob]
+}
+
+output "operator_backend" {
+  description = "Optional operator-owned backend coordinates. Keep identity/bootstrap state here and component CI grants on separate containers."
+  value = var.operator_state_container_name == null ? null : {
+    subscription_id      = var.subscription_id
+    tenant_id            = var.tenant_id
+    resource_group_name  = azurerm_resource_group.state[var.operator_state_environment].name
+    storage_account_name = azurerm_storage_account.state[var.operator_state_environment].name
+    container_name       = azurerm_storage_container.operator[0].name
+    use_azuread_auth     = true
+  }
+}

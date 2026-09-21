@@ -85,7 +85,7 @@ Record these state keys before first init. They assume the private component nam
 | 9 | AKS pprd/uks | `aks-pprd-uks.tfstate` | Network, DNS, ACR, routes and vault |
 | 10 | Gateway pprd/uks | `gateway-pprd-uks.tfstate` | Both HTTPS backends and frontend certificate |
 
-Backend bootstrap starts locally and migrates its existing state using [the bootstrap guide](bootstrap.md). Configure a private AzureRM backend with `use_azuread_auth = true` and a separate explicit key for each standalone identities/connections/vault root. Those roots use reviewed `terraform.tfvars` and their documented Terraform commands; the component helper does not configure them automatically.
+Set `operator_state_container_name = "aks-lab-bootstrap"` in the isolated backend input. Keep bootstrap, identity/grant and optional service-connection states in that operator-only container; component CI identities receive data roles only on their component containers. Granting CI write access to the identity state would let it alter its own access model. Backend bootstrap starts locally and migrates its existing state using [the bootstrap guide](bootstrap.md), selecting `--operator-state` for this profile. Configure a private AzureRM backend with `use_azuread_auth = true` and a separate explicit key for each standalone identities/connections/vault root. Those roots use reviewed `terraform.tfvars` and their documented Terraform commands; the component helper does not configure them automatically.
 
 Update all network/route remote-state references if names or keys change. Never initialise two roots against one key, or silently switch keys after deployment. State, saved plans, real inputs, observations and reports stay private.
 
@@ -128,6 +128,8 @@ Keep Application Gateway routing separate from AKS forced tunnelling and leave A
 Give the worker a separate explicit state key and record its ownership, management path, DNS, outbound routing and removal. Same-region Azure Storage access cannot rely on the worker public IP allowlist; use the declared Blob private endpoints and hub DNS zone. Install reviewed tools and a repository-scoped CI runner separately. Keep one-time operator login separate from the runner account, use short-lived registration tokens, and remove registrations and local credentials during teardown.
 
 Apply the [private workload-vault root](../../examples/azure/three-tier/workload-vault/README.md) against the applied endpoint subnet and hub DNS zone. Declare the seed operator's Secrets Officer grant in code. Keep purge protection and choose retention before creation.
+
+Create the trial certificates using the [lab certificate helper](../../examples/azure/three-tier/lab-certificates/README.md). It generates and verifies a seven-day CA, separate backend PEM and frontend PFX outside Git. Its guide also creates the qualification file, imports the frontend certificate and identifies the exact operator permissions. The optional `certificate_seed_operator_object_ids` vault input grants certificate import rights explicitly. Only the public CA belongs in app/gateway trust inputs.
 
 Seed from that authorised private path, using existing local files and suppressing values:
 
@@ -253,7 +255,7 @@ Test actual frontend TLS/web/API/preview/redirect/WAF behavior, not only probes.
 
 For GitHub promotion, choose A's successful producer run and `build-workflow=build-deploy.yml` when that was its producer; `image-build.yml` is different. Azure promotion likewise needs the actual producer definition/run. Under Argo, reverse reviewed desired state and sync only the selected slot.
 
-Use the app repository’s [Azure traffic qualifier](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-WORKLOAD.md#qualify-the-azure-gateway-and-traffic-switch) at each row. Retain separate reports against the same gateway resource, frontend IP and hostnames; it checks actual frontend ownership, selected backend health and CA-verified responses for the expected slot/revision. The CSI and traffic reports establish different parts of the path.
+Use the app repository’s [Azure traffic qualifier](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-WORKLOAD.md#qualify-the-stable-azure-gateway-through-cutover-and-rollback) at each row. Retain separate reports against the same gateway resource, frontend IP and hostnames; it checks actual frontend ownership, selected backend health and CA-verified responses for the expected slot/revision. The CSI and traffic reports establish different parts of the path.
 
 The WAF endpoint/listeners/backend FQDN remain stable. DNS caches, probes and connections make convergence noninstantaneous. Keep the former healthy slot through the rollback window. Never apply a stale plan after editing inputs. See [cutover semantics](https://github.com/MikeeeGit/azure-application-gateway/blob/main/docs/cutover.md). This stateless exercise does not qualify database rollback or regional recovery.
 

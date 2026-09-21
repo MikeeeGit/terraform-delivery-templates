@@ -34,7 +34,8 @@ run "private_rbac_vault" {
     condition = (azurerm_private_endpoint.vault.subnet_id == var.private_endpoint_subnet_id &&
       azurerm_private_endpoint.vault.private_service_connection[0].subresource_names == tolist(["vault"]) &&
       azurerm_private_endpoint.vault.private_dns_zone_group[0].private_dns_zone_ids == tolist([var.private_dns_zone_id]) &&
-    length(azurerm_role_assignment.secret_administrator) == 0)
+      length(azurerm_role_assignment.secret_administrator) == 0 &&
+    length(azurerm_role_assignment.certificate_seed_operator) == 0)
     error_message = "Endpoint ownership must use existing network outputs; no secret administration is implicit."
   }
 }
@@ -57,4 +58,34 @@ run "reject_wrong_subnet_subscription" {
   command = plan
   variables { private_endpoint_subnet_id = "/subscriptions/00000000-0000-0000-0000-000000000009/resourceGroups/spoke-rg/providers/Microsoft.Network/virtualNetworks/spoke/subnets/private-endpoints" }
   expect_failures = [var.private_endpoint_subnet_id]
+}
+
+run "explicit_certificate_seed_operators" {
+  command = plan
+  variables {
+    secret_administrator_object_ids      = { operators = "00000000-0000-0000-0000-000000000031" }
+    certificate_seed_operator_object_ids = ["00000000-0000-0000-0000-000000000031", "00000000-0000-0000-0000-000000000032"]
+  }
+  assert {
+    condition = (length(azurerm_role_assignment.certificate_seed_operator) == 2 &&
+      alltrue([for id, assignment in azurerm_role_assignment.certificate_seed_operator :
+        assignment.principal_id == id && assignment.scope == azurerm_key_vault.workload.id &&
+        assignment.role_definition_name == "Key Vault Certificates Officer"
+      ]) &&
+      length(azurerm_role_assignment.secret_administrator) == 1 &&
+      azurerm_role_assignment.secret_administrator["operators"].role_definition_name == "Key Vault Secrets Officer" &&
+      azurerm_key_vault.workload.purge_protection_enabled &&
+    !azurerm_key_vault.workload.public_network_access_enabled)
+    error_message = "Only explicitly selected certificate operators receive the vault-scoped certificate role; secret grants and vault isolation remain intact."
+  }
+}
+run "reject_invalid_certificate_operator" {
+  command = plan
+  variables { certificate_seed_operator_object_ids = ["not-an-object-uuid"] }
+  expect_failures = [var.certificate_seed_operator_object_ids]
+}
+run "reject_duplicate_certificate_operator_case" {
+  command = plan
+  variables { certificate_seed_operator_object_ids = ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"] }
+  expect_failures = [var.certificate_seed_operator_object_ids]
 }

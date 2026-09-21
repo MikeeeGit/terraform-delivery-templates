@@ -62,3 +62,30 @@ variable "resource_group_name_prefix" {
     error_message = "resource_group_name_prefix must be empty or 1-20 lowercase letters/digits/hyphens, starting with a letter and ending alphanumeric."
   }
 }
+
+variable "operator_state_container_name" {
+  description = "Optional separate private container for operator-owned bootstrap and identity-grant state. Grant component CI no access to this container."
+  type        = string
+  default     = null
+  validation {
+    condition = var.operator_state_container_name == null ? true : (
+      can(regex("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", var.operator_state_container_name)) &&
+      !strcontains(var.operator_state_container_name, "--")
+    )
+    error_message = "Use a 3-63 character lowercase Azure container name without consecutive hyphens, or null to preserve defaults."
+  }
+  validation {
+    condition     = var.operator_state_container_name == null ? true : var.operator_state_container_name != "${var.secondary_region}-${var.operator_state_environment}-azdo-tfstate"
+    error_message = "Operator state must use a different container from the selected environment's component state."
+  }
+  validation {
+    condition     = var.operator_state_container_name == null || contains(var.backend_environments, var.operator_state_environment)
+    error_message = "When operator state is enabled, operator_state_environment must be present in backend_environments."
+  }
+}
+variable "operator_state_environment" {
+  description = "Owned state account that holds the optional operator container."
+  type        = string
+  default     = "hub"
+  nullable    = false
+}

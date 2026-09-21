@@ -137,3 +137,9 @@ For the network foundation, create selected networks with peerings disabled firs
 ## Validation limits
 
 Source validation and mocked tests cover configuration, targeting, receipts and expected command behavior. They do not demonstrate role propagation, your tenant's policies, private network reachability, service-connection approvals or a real Azure deployment. Record a sandbox deployment separately after configuring your own private consumer and budget.
+
+## Keep operator state outside CI component containers
+
+For the three-tier profile, set the backend root’s optional `operator_state_container_name` and select its owned `operator_state_environment` before first apply. Run `initial-setup/azure/migrate_state.py --directory /private/bootstrap-state --operator-state` to migrate the initial local bootstrap state there. Store identity/grant state in that same protected container under separate keys. Component CI gets only its component-container data grants; it must not receive data write access to the operator container or account-level permissions that bypass the boundary.
+
+Migration retains private before/after recovery snapshots. It requires unchanged lineage, resources and outputs, and accepts an unchanged serial or a single increment written by Terraform during migration. Any other difference fails verification and requires inspection before another operation. The helper refuses to overwrite an existing remote-backend configuration; relocating an already remote state requires a separately reviewed migration, retaining and comparing both copies.
