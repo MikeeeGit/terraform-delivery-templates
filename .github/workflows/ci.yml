@@ -28,6 +28,12 @@ jobs:
         with:
           terraform_version: 1.16.3
           terraform_wrapper: false
+      - name: Install hashed cleanup helper dependency
+        if: steps.scope.outputs.run-tests == 'true'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/template-python"
+          "$RUNNER_TEMP/template-python/bin/pip" install --require-hashes -r requirements.txt
+          echo "$RUNNER_TEMP/template-python/bin" >> "$GITHUB_PATH"
       - name: Test validation boundaries
         if: steps.scope.outputs.run-tests == 'true'
         run: python3 -m unittest discover -s tests -v

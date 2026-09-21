@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "workspace": "/home/operator/private-aks-consumers",
+  "private_evidence_root": "/home/operator/private-aks-recovery",
+  "azure_config_dir": "/home/operator/private-aks-credentials/azure",
+  "bootstrap_pat_file": "/home/operator/private-aks-credentials/bootstrap.pat",
+  "terraform_binary": "/home/operator/tools/terraform",
+  "subscription_id": "00000000-0000-0000-0000-000000000002",
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "azure_devops_project_id": "00000000-0000-0000-0000-000000000003",
+  "azure_devops_organization_url": "https://dev.azure.com/example/",
+  "protected_admin_group_id": "00000000-0000-0000-0000-000000000004",
+  "storage_prefix": "example"
+}

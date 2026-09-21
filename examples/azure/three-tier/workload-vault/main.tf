@@ -43,7 +43,7 @@ resource "azurerm_key_vault" "workload" {
   enabled_for_template_deployment = false
   tags                            = local.tags
   network_acls {
-    bypass         = "None"
+    bypass         = var.allow_trusted_azure_services ? "AzureServices" : "None"
     default_action = "Deny"
   }
 }

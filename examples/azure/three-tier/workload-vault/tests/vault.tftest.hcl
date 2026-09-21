@@ -89,3 +89,19 @@ run "reject_duplicate_certificate_operator_case" {
   variables { certificate_seed_operator_object_ids = ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"] }
   expect_failures = [var.certificate_seed_operator_object_ids]
 }
+
+run "trusted_services_opt_in_preserves_other_boundaries" {
+  command = plan
+  variables { allow_trusted_azure_services = true }
+  assert {
+    condition = (azurerm_key_vault.workload.network_acls[0].bypass == "AzureServices" &&
+      azurerm_key_vault.workload.network_acls[0].default_action == "Deny" &&
+      !azurerm_key_vault.workload.public_network_access_enabled &&
+      azurerm_key_vault.workload.rbac_authorization_enabled &&
+      azurerm_key_vault.workload.purge_protection_enabled &&
+      azurerm_private_endpoint.vault.private_service_connection[0].subresource_names == tolist(["vault"]) &&
+      length(azurerm_role_assignment.secret_administrator) == 0 &&
+      length(azurerm_role_assignment.certificate_seed_operator) == 0)
+    error_message = "Trusted-service opt-in must not enable public access, remove private connectivity/protection or add identity grants."
+  }
+}

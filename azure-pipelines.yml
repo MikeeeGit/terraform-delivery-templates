@@ -20,6 +20,12 @@ steps:
       python3 scripts/install_terraform.py --install-dir "$AGENT_TEMPDIRECTORY/terraform-bin"
       echo "##vso[task.prependpath]$AGENT_TEMPDIRECTORY/terraform-bin"
     displayName: Install checksum-verified Terraform
+  - bash: |
+      set -euo pipefail
+      python3 -m venv "$AGENT_TEMPDIRECTORY/template-python"
+      "$AGENT_TEMPDIRECTORY/template-python/bin/pip" install --require-hashes -r requirements.txt
+      echo "##vso[task.prependpath]$AGENT_TEMPDIRECTORY/template-python/bin"
+    displayName: Install hashed cleanup helper dependency
   - bash: python3 -m unittest discover -s tests -v
     displayName: Test script safety and saved-plan contract
   - bash: python3 scripts/validate.py --source-root "$BUILD_SOURCESDIRECTORY" --directory tests/fixtures/mock-module --test-directory tests

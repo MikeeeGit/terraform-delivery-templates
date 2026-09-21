@@ -90,3 +90,10 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "allow_trusted_azure_services" {
+  description = "Explicitly allow Key Vault trusted Microsoft services (including Application Gateway certificate retrieval) to bypass network restrictions. Public access stays disabled; RBAC remains required. This exception covers the trusted-services list, not only this gateway."
+  type        = bool
+  default     = false
+  nullable    = false
+}

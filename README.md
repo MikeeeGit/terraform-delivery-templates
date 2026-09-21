@@ -33,6 +33,8 @@ Apache-2.0 licensed. See [LICENSE](LICENSE), [CONTRIBUTING.md](CONTRIBUTING.md) 
 
 ## Complete Azure platform example
 
+Start with the [three-tier dual-AKS run list](docs/azure/quick-runbook.md) for the deployment pipelines, standby update, traffic switch, rollback and complete scripted removal.
+
 For your first real Azure rehearsal, use the [sandbox deployment runbook](docs/azure/sandbox-deployment.md), including input consolidation, private access, certificate gates, costs and teardown. Follow the [hub/spoke, dual-AKS and WAF gateway scenario](docs/azure/hub-spoke-platform.md) for cross-repository deployment order, state ownership and blue/green operation. [Private network caller examples](examples/azure/hub-spoke/README.md) cover both CI platforms.
 
 
