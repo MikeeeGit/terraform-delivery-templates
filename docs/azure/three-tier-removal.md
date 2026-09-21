@@ -37,6 +37,8 @@ python3 "$TOOL" apply --config "$CONFIG" \
 
 The scripts reject wrong subscriptions/backends, foreign resource groups, shared directory objects, changed source/state and create/update/replace actions. Each apply writes its result and a final private state snapshot. A failed action stops the sequence; retain its output and re-plan after resolving the actual cause.
 
+**Existing application connections are excluded.** Before deleting an endpoint, the helper checks its exact state-owned ID/name and live project references, and rejects shared connections or any reference outside the selected private lab project. Do not point this profile at existing delivery identities or endpoints used by other applications.
+
 During the live trial, Azure DevOps briefly rejected endpoint deletion immediately after Azure reported its managed-identity federated credentials deleted. Keep the bootstrap PAT, verify the exact identity's credential list is empty, allow propagation, then create a **fresh full removal plan** in a new directory. Review the remaining endpoint-only deletions and apply that new plan. Do not reuse the failed plan, recreate federation, delete another identity, or remove state records as a workaround. Retire the PAT only after all three connection states are empty.
 
 | Order | Action to run | Target / completion gate |

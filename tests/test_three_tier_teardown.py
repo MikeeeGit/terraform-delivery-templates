@@ -33,6 +33,19 @@ def fixture(base, component='aks-lab-firewall', environment='hub'):
 
 
 class GuardTests(unittest.TestCase):
+    def test_only_exact_unshared_lab_endpoints_can_be_removed(self):
+        row = {"id": "owned", "name": "aks-lab-hub-plan-oidc", "isShared": False,
+               "serviceEndpointProjectReferences": [{"projectReference": {"id": helper.PROJECT}}]}
+        helper.validate_endpoint_ownership(row, "owned", row["name"])
+        variants = [dict(row, isShared=True), dict(row, id="another"),
+                    dict(row, name="existing-application"),
+                    dict(row, serviceEndpointProjectReferences=[]),
+                    dict(row, serviceEndpointProjectReferences=[
+                        {"projectReference": {"id": helper.PROJECT}}, {"projectReference": {"id": "another-project"}}])]
+        for changed in variants:
+            with self.assertRaisesRegex(ValueError, "outside the exact private lab"):
+                helper.validate_endpoint_ownership(changed, "owned", row["name"])
+
     def test_check_order_is_semantic_but_resource_and_serial_changes_are_not(self):
         state = {"lineage": "same", "serial": 7, "resources": [{"value": "original"}],
                  "check_results": [{"config_addr": "resource.example", "status": "pass",

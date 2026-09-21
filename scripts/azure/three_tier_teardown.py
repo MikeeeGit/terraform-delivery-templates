@@ -407,6 +407,31 @@ def validate_plan(plan, component, environment):
     return deletes
 
 
+def validate_endpoint_ownership(endpoint, expected_id, expected_name):
+    references = endpoint.get("serviceEndpointProjectReferences") or []
+    projects = {row.get("projectReference", {}).get("id") for row in references}
+    require(endpoint.get("id") == expected_id and endpoint.get("name") == expected_name
+            and expected_name.startswith("aks-lab-") and endpoint.get("isShared") is not True
+            and projects == {PROJECT},
+            "Service connection is shared, renamed, foreign or outside the exact private lab")
+
+
+def check_live_endpoints(state, work, env):
+    devops_env = dict(env)
+    devops_env.pop("AZURE_CONFIG_DIR", None)  # Use the retained, separate DevOps owner login.
+    for resource in state.get("resources", []):
+        if resource.get("mode") != "managed" or resource.get("type") != "azuredevops_serviceendpoint_azurerm":
+            continue
+        for instance in resource.get("instances", []):
+            attributes = instance["attributes"]
+            endpoint = json.loads(run(
+                ["az", "devops", "invoke", "--organization", ORGANIZATION, "--area", "serviceendpoint",
+                 "--resource", "endpoints", "--http-method", "GET", "--api-version", "7.1",
+                 "--route-parameters", "project=" + PROJECT, "endpointId=" + attributes["id"], "--output", "json"],
+                work, devops_env, "Verify exact unshared lab service connection"))
+            validate_endpoint_ownership(endpoint, attributes["id"], attributes["service_endpoint_name"])
+
+
 def plan_one(binding, output, expected_hash, operation="destroy"):
     require(operation in ("destroy", "detach-peerings") and (operation == "destroy" or binding["component"] == "aks-lab-network"), "Unsupported removal operation")
     require(re.fullmatch(r'[0-9a-f]{64}', expected_hash or '') is not None and binding['source_sha256'] == expected_hash, 'Review inventory and pass its exact --expected-source-sha256')
@@ -545,6 +570,8 @@ def apply_one(binding, output, expected_plan):
     current = run([str(TERRAFORM), "state", "pull"], work, env, "Pre-apply state snapshot")
     validate_state(json.loads(current), binding["component"], binding["environment"])
     require(comparable_state(json.loads(current)) == comparable_state(json.loads(regular(output / "state-after.tfstate"))), "State changed since reviewed plan; re-plan")
+    if binding["component"] == CONNECTIONS:
+        check_live_endpoints(json.loads(current), work, env)
     plan = json.loads(run([str(TERRAFORM), "show", "-json", str(saved)], work, env, "Recheck saved plan"))
     require(validate_plan(plan, binding["component"], binding["environment"]) == receipt["delete_addresses"], "Saved delete set changed")
     if binding["component"] == CONNECTIONS:
