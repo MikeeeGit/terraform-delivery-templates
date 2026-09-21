@@ -103,6 +103,43 @@ class CleanupGuards(unittest.TestCase):
         self.assertFalse(any("uninstall" in c for c in calls))
         self.assertFalse((self.root / "out/result.json").exists())
 
+    def test_retry_checks_original_cloud_address_after_service_disappears(self):
+        previous = self.root / "previous.json"
+        previous.write_text(json.dumps({
+            "slot": "aks01", "cluster_id": "owned-cluster", "node_resource_group": "owned-nodes",
+            "source_commit": self.receipt["source_commit"], "manifest_sha256": self.receipt["manifest_sha256"],
+            "gateway": "platform-demo-private", "frontend_addresses": ["10.81.0.20"],
+        }))
+        previous.chmod(0o600)
+        context = (self.receipt["target"], {"id": "owned-cluster", "nodeResourceGroup": "owned-nodes"},
+                   self.root / "kubeconfig", ["kubectl"], {})
+        calls = []
+        def read(args, *unused):
+            calls.append(args)
+            if "services" in args: return {"items": []}
+            if args[:3] == ["az", "network", "lb"]:
+                return [{"frontendIPConfigurations": [{"privateIPAddress": "10.81.0.20"}]}]
+            raise AssertionError(args)
+        with patch.object(cleanup.tf, "PRIVATE", self.root), patch.object(cleanup, "kube_context", return_value=context), \
+             patch.object(cleanup, "data", side_effect=read), patch.object(cleanup, "command", return_value=b""), \
+             patch.object(cleanup.time, "monotonic", side_effect=[0, 400]):
+            with self.assertRaisesRegex(ValueError, "frontends remain"):
+                cleanup.services(self.bundle, self.root / "retry", None, True, previous)
+        self.assertTrue(any(c[:3] == ["az", "network", "lb"] for c in calls))
+        self.assertFalse(any(c[0] == "helm" for c in calls))
+
+    def test_retry_rejects_previous_inventory_from_another_release(self):
+        previous = self.root / "previous.json"
+        previous.write_text(json.dumps({"slot": "aks02"}))
+        previous.chmod(0o600)
+        context = (self.receipt["target"], {"id": "owned-cluster", "nodeResourceGroup": "owned-nodes"},
+                   self.root / "kubeconfig", ["kubectl"], {})
+        with patch.object(cleanup.tf, "PRIVATE", self.root), patch.object(cleanup, "kube_context", return_value=context), \
+             patch.object(cleanup, "data", return_value={"items": []}), patch.object(cleanup, "command") as command:
+            with self.assertRaisesRegex(ValueError, "another release or cluster"):
+                cleanup.services(self.bundle, self.root / "retry", None, True, previous)
+        command.assert_not_called()
+
     def test_backend_refuses_foreign_subscription_or_unrelated_group(self):
         def state(resource_id, kind="azurerm_storage_account"):
             return {"version":4, "lineage":"original", "serial":2, "resources":[

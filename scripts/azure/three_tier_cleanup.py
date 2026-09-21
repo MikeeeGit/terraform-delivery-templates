@@ -18,6 +18,8 @@ import three_tier_teardown as tf
 
 def command(args, env, *, cwd=None, allowed=(0,)):
     result = subprocess.run(args, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode not in allowed and env.get("AKS_LAB_CLEANUP_ERRORS"):
+        tf.write_private(Path(env["AKS_LAB_CLEANUP_ERRORS"]), result.stdout + b"\n" + result.stderr)
     tf.require(result.returncode in allowed, "Command failed: " + " ".join(args[:3]) + "; inspect the selected target and credentials")
     return result.stdout
 
@@ -32,6 +34,7 @@ def kube_context(receipt, output, proxy):
                and target["cluster_name"] == "uks-pprd-akslab-" + target["slot"]
                and target["namespace"] == "platform-demo", "Receipt escapes the isolated disposable profile")
     env = tf.child_environment(output)
+    env["AKS_LAB_CLEANUP_ERRORS"] = str(output / "command-failure.log")
     cluster = data(["az", "aks", "show", "--subscription", tf.SUBSCRIPTION,
                     "--resource-group", target["resource_group"], "--name", target["cluster_name"], "-o", "json"], env)
     expected = f"/subscriptions/{tf.SUBSCRIPTION}/resourceGroups/{target['resource_group']}/providers/Microsoft.ContainerService/managedClusters/{target['cluster_name']}"
@@ -73,7 +76,7 @@ def validate_bundle(bundle):
                for x in objects), "Bundle contains unexpected cleanup objects")
     return receipt, objects
 
-def services(bundle, output, proxy, execute):
+def services(bundle, output, proxy, execute, previous_inventory=None):
     receipt, objects = validate_bundle(bundle)
     tf.create_output(output)
     target, cluster, kubeconfig, base, env = kube_context(receipt, output, proxy)
@@ -91,6 +94,20 @@ def services(bundle, output, proxy, execute):
                  "objects": [{"kind": x["kind"], "name": x["metadata"]["name"]} for x in objects],
                  "gateway": gateway, "services": [{"namespace": x["metadata"]["namespace"], "name": x["metadata"]["name"]} for x in before],
                  "frontend_addresses": addresses, "resource_apply_performed": False}
+    if previous_inventory:
+        tf.require(previous_inventory.resolve().is_relative_to(tf.PRIVATE.resolve()),
+                   "Previous inventory must be in protected recovery storage")
+        tf.private_path(previous_inventory)
+        previous = json.loads(tf.regular(previous_inventory))
+        fields = ("slot", "cluster_id", "node_resource_group", "source_commit", "manifest_sha256", "gateway")
+        tf.require(all(previous.get(key) == inventory[key] for key in fields),
+                   "Previous cleanup inventory belongs to another release or cluster")
+        expected_ip = {"aks01": "10.81.0.20", "aks02": "10.81.4.20"}[target["slot"]]
+        tf.require(all(ip == expected_ip for ip in previous["frontend_addresses"]),
+                   "Previous frontend address escapes the fixed disposable listener")
+        addresses = sorted(set(addresses) | set(previous["frontend_addresses"]))
+        inventory["frontend_addresses"] = addresses
+        inventory["previous_inventory"] = str(previous_inventory)
     tf.write_private(output / "inventory.json", json.dumps(inventory, indent=2))
     if not execute:
         print(json.dumps({"status": "inventory-only", "slot": target["slot"], "output": str(output)}))
@@ -114,7 +131,12 @@ def services(bundle, output, proxy, execute):
     for kind, name in [("clienttrafficpolicy", "application-gateway-client-ip"), ("envoyproxy", "private-proxy")]:
         command(base + ["-n", target["namespace"], "delete", kind, name,
                         "--ignore-not-found=true", "--wait=true", "--timeout=180s"], env)
-    releases = data(["helm", "--kubeconfig", str(kubeconfig), "list", "-n", "envoy-gateway-system", "-a", "-o", "json"], env)
+    tf.write_private(output / "services-removed.json",
+                     json.dumps(dict(inventory, gateway_services_removed=True, cloud_frontends_released=True), indent=2))
+    # Explicit status filters work with Helm 3 and 4; Helm 4 removed list --all/-a.
+    releases = data(["helm", "--kubeconfig", str(kubeconfig), "list", "-n", "envoy-gateway-system",
+                     "--deployed", "--failed", "--pending", "--uninstalled", "--uninstalling", "--superseded",
+                     "-o", "json"], env)
     matches = [x for x in releases if x["name"] == "envoy-gateway"]
     tf.require(len(matches) <= 1, "Ambiguous Helm ownership")
     if matches:
@@ -134,11 +156,12 @@ def main(argv=None):
     p.add_argument("--bundle", required=True, type=Path)
     p.add_argument("--output", required=True, type=Path)
     p.add_argument("--proxy-url")
+    p.add_argument("--previous-inventory", type=Path, help="Retain original frontend addresses when retrying a partial cleanup")
     p.add_argument("--execute", action="store_true")
     args = p.parse_args(argv)
     os.umask(0o077)
     tf.configure(args.config)
-    services(args.bundle.resolve(), args.output, args.proxy_url, args.execute)
+    services(args.bundle.resolve(), args.output, args.proxy_url, args.execute, args.previous_inventory)
 
 if __name__ == "__main__":
     try:

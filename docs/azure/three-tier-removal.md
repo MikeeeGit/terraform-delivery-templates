@@ -72,6 +72,8 @@ python3 "$TOOL" verify --config "$CONFIG" \
 
 The services phase deletes the exact verified app bundle, deletes its Gateway, waits for owned Services and Azure frontends to disappear, then uninstalls Envoy. It does not force finalizers. The backend phase independently rereads every component state and requires zero managed resources before migration. A backup copy alone is not a backend migration.
 
+For a partially completed services phase, use a new output directory and pass **--previous-inventory** pointing to the original inventory.json. The helper binds that inventory to the same cluster and release, and rechecks the original frontend addresses even when Kubernetes has already deleted the Services. A command failure is retained privately in command-failure.log. The services-removed.json checkpoint records cloud frontend release before controller removal.
+
 Retain the bootstrap PAT revocation receipt and verify protected deleted-vault retention through its recorded owner. PAT retirement uses the [Azure DevOps token lifecycle API](https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats/revoke?view=azure-devops-rest-7.1) with a delegated owner token; the bootstrap PAT itself cannot substitute for that owner authentication. Quota, provider registration, the existing administrator group, private CI history and off-cloud recovery evidence are intentionally retained. They are not active lab compute/network resources. For Argo-installed Azure consumers, complete the reconciliation handover below before the services phase; the direct Azure profile does not install Argo.
 
 ## 1. Freeze changes and record ownership
