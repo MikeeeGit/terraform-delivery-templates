@@ -1,6 +1,6 @@
 # Rebuilding the three-tier Azure deployment
 
-The Azure deployment consists of infrastructure, cluster platform services and application delivery. Identities, trust and permissions cross all three tiers. This guide connects the public component repositories into private consumers with per-environment managed identities and two independent AKS slots. The existing direct and Argo delivery methods and the disposable Kubernetes tests remain available.
+The Azure deployment consists of infrastructure, cluster platform services and application delivery. Identities, trust and permissions cross all three tiers. This guide connects the public component repositories into private consumers with per-environment managed identities and two independent AKS clusters. The existing direct and Argo delivery methods and the disposable Kubernetes tests remain available.
 
 | Tier | Repository and executable entry points | Owns |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ For Azure DevOps, apply [federated service connections](../../initial-setup/azur
 
 Apply the selected network/firewall/route prerequisites. Provide the application vault and its private network path; the [workload vault example](../../examples/azure/three-tier/workload-vault/README.md) creates an RBAC vault and private endpoint against the existing network/DNS. Certificate material and application secret values are populated through the authorised secret-management process, outside Terraform state. Seed a nonempty `platform-demo-qualification` secret for the sample check; never publish its value. The backend certificate must satisfy the existing HTTPS guide.
 
-Keep the [AKS workload identity map](https://github.com/MikeeeGit/azure-aks-foundation/tree/main/examples/ingress-tls) in each environment's AKS inputs. It declares the application ServiceAccount, both cluster slots and exact vault/resource grants. Add other Azure access by adding scoped roles to that workload identity's map. Do not grant all workloads the node or platform identity.
+Keep the [AKS workload identity map](https://github.com/MikeeeGit/azure-aks-foundation/tree/main/examples/ingress-tls) in each environment's AKS inputs. It declares the application ServiceAccount, both target clusters and exact vault/resource grants. Add other Azure access by adding scoped roles to that workload identity's map. Do not grant all workloads the node or platform identity.
 
 Export the applied CI identity root as a wrapped output snapshot in a private evidence directory:
 
@@ -64,7 +64,7 @@ The output is a typed `delivery_principals` input for Azure AKS Foundation. Merg
 
 For the native permission profile, explicitly set `kubernetes_authorization_mode = "kubernetes_rbac"` and the existing authorised Entra administrator group IDs. This retains Entra authentication and disabled local accounts. The default Azure RBAC profile is preserved. Review [AKS CI identity and authorization](https://github.com/MikeeeGit/azure-aks-foundation/blob/main/docs/ci-identity-and-authorization.md) before choosing the mode; switching a live cluster needs a separate access migration.
 
-Apply AKS and its permissions. Terraform owns each CI principal's Cluster User role on the declared slots, plus the existing workload UAMI, exact per-slot OIDC federations and Azure resource roles. Cluster User permits obtaining user kubeconfig; Kubernetes permissions still belong to tier 2.
+Apply AKS and its permissions. Terraform owns each CI principal's Cluster User role on the declared clusters, plus the existing workload UAMI, exact per-cluster OIDC federations and Azure resource roles. Cluster User permits obtaining user kubeconfig; Kubernetes permissions still belong to tier 2.
 
 ## 3. Generate the platform/application identity bindings
 
@@ -85,30 +85,31 @@ python3 terraform-delivery-templates/scripts/azure/three_tier_handoff.py applica
 
 Review and copy the generated `application/` and `platform/` file trees over the corresponding private consumer roots. JSON written to the named YAML patch files is valid YAML and is accepted by Kustomize. The generated pack updates both AKS targets, registry details, both platform ServiceAccount declarations, application identity/TLS patches, app CSI provider and the expected Azure qualification contract.
 
-This eliminates manual copying of client IDs between the tiers. It rejects a wrong tenant/environment, missing slot, different federation subject/issuer, mismatched vault grant or incompatible sample profile. It never retrieves secrets or overwrites an existing output directory. Hostnames, Envoy frontend IPs/subnets/source ranges and approved controller pins remain your reviewed platform/network configuration; the identity generator does not invent them.
+This eliminates manual copying of client IDs between the tiers. It rejects a wrong tenant/environment, missing cluster, different federation subject/issuer, mismatched vault grant or incompatible sample profile. It never retrieves secrets or overwrites an existing output directory. Hostnames, Envoy frontend IPs/subnets/source ranges and approved controller pins remain your reviewed platform/network configuration; the identity generator does not invent them.
 
 ## 4. Platform: discover CI identity, bootstrap namespace access, install services
 
-Use [native Azure authorization](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/native-azure-authorization.md). Run the identity-discovery workflow/stage as the actual application CI identity on both slots. It verifies the client ID, obtains user credentials and records the Kubernetes username returned by the API. Match these private observations to Terraform's `delivery_authorization` output. Populate the native bootstrap map from those observations; do not guess Kubernetes usernames from UUIDs.
+Use [native Azure authorization](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/native-azure-authorization.md). Run the identity-discovery workflow/stage as the actual application CI identity on both clusters. It verifies the client ID, obtains user credentials and records the Kubernetes username returned by the API. Match these private observations to Terraform's `delivery_authorization` output. Populate the native bootstrap map from those observations; do not guess Kubernetes usernames from UUIDs.
 
 Run the native namespace bootstrap as an already authorised Entra operator. It creates the application Role and a consolidated RoleBinding for the declared deployers, with HTTPRoute/CSI writes and Gateway reads. Native mode creates no imperative Azure role grants. Removing a subject from the managed binding and reapplying removes its access through that binding; other grants remain additive.
 
-Install the maintained platform profile using the existing prepare/apply lifecycle and generated platform configuration. This installs pinned Gateway API/Envoy CRDs, controllers, both slot-specific proxies/Gateways and the workload ServiceAccount. The workload's first CSI mount supplies the TLS Secret, so full Gateway/HTTPS acceptance follows application rollout.
+Install the maintained platform profile using the existing prepare/apply lifecycle and generated platform configuration. This installs pinned Gateway API/Envoy CRDs, controllers, both cluster-specific proxies/Gateways and the workload ServiceAccount. The workload's first CSI mount supplies the TLS Secret, so full Gateway/HTTPS acceptance follows application rollout.
 
-**Initial platform authority:** follow the [platform CI bootstrap](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-ci-bootstrap.md). An existing Entra administrator explicitly opts in to bind only the Terraform-declared platform identity on the selected slots, after matching real identity-discovery records. The guarded command uses user credentials and supports explicit subject revocation. The platform pipeline can then run the maintained lifecycle; build/application identities retain their separate scopes. Cluster User alone does not provide Kubernetes write permissions. The initial operator/group and private connectivity remain prerequisites.
+**Initial platform authority:** follow the [platform CI bootstrap](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-ci-bootstrap.md). An existing Entra administrator explicitly opts in to bind only the Terraform-declared platform identity on the selected clusters, after matching real identity-discovery records. The guarded command uses user credentials and supports explicit subject revocation. The platform pipeline can then run the maintained lifecycle; build/application identities retain their separate scopes. Cluster User alone does not provide Kubernetes write permissions. The initial operator/group and private connectivity remain prerequisites.
 
 The existing Azure RBAC path remains available. Its custom-resource ABAC recipe is an explicit preview option and must not be silently replaced with unrestricted app permissions. Do not run two grant owners against the same resources.
 
-## 5. Application: build once, deploy both slots, prove Azure access
+<a id="5-application-build-once-deploy-both-slots-prove-azure-access"></a>
+## 5. Application: build once, deploy both clusters, prove Azure access
 
 Use the full [Azure workload callers](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-WORKLOAD.md) in the private application consumer:
 
-- `examples/delivery/github-azure-workload-build-deploy.yml` or `azure-azure-workload-build-deploy.yml` for build, scan, immutable receipt and selected-slot deployment.
+- `examples/delivery/github-azure-workload-build-deploy.yml` or `azure-azure-workload-build-deploy.yml` for build, scan, immutable receipt and selected-cluster deployment.
 - The matching `*-azure-workload-promote.yml` caller to promote a selected existing release without rebuilding.
 
 The build identity publishes to ACR; the application identity deploys through the scoped native binding. The per-environment workload UAMI accesses Key Vault through the exact ServiceAccount on either cluster's OIDC issuer. Application secret values are mounted by CSI and are not synchronised to a Kubernetes Secret. Backend TLS retains its separate TLS Secret synchronisation required by the Gateway.
 
-The Azure profile adds an opt-in readiness requirement for a nonempty mounted application secret. Its qualifier checks the actual cluster/identity binding, selected deployment revision, mounting Pods, CSI status and readiness without recording secret contents. Run on both slots. A valid manifest or successful kind deployment cannot satisfy this Azure gate.
+The Azure profile adds an opt-in readiness requirement for a nonempty mounted application secret. Its qualifier checks the actual cluster/identity binding, selected deployment revision, mounting Pods, CSI status and readiness without recording secret contents. Run on both clusters. A valid manifest or successful kind deployment cannot satisfy this Azure gate.
 
 For Argo CD, retain the existing reviewed Git promotion/sync path using the same rendered Azure workload overlay. Argo owns application reconciliation; bootstrap and platform installation remain independent. Run the same Azure qualifier after sync and readiness. Do not imperatively deploy the app into a namespace owned by Argo. The workload MI/CSI path is identical under either delivery owner.
 
@@ -122,4 +123,4 @@ Changes to identities, role scopes and federation are Terraform changes. Applica
 
 Offline Terraform tests validate schema, declared identities/roles, mode selection and federation/output contracts. Python tests exercise target/role/federation mismatches and generated configuration. Real Kustomize rendering checks the produced application manifests. Application tests check that missing or empty required secret mounts fail readiness without exposing content. Shared tests exercise allowed/denied native RBAC operations and identity-discovery failures. Hosted kind tests remain Kubernetes application/controller evidence.
 
-Only an actual Azure run can qualify service-connection login, Entra permissions, private DNS/routing, ACR pull, managed CSI/Key Vault access and WAF traffic. Record those results per environment and slot. The publication of these templates is not evidence that an Azure deployment has passed.
+Only an actual Azure run can qualify service-connection login, Entra permissions, private DNS/routing, ACR pull, managed CSI/Key Vault access and WAF traffic. Record those results per environment and cluster. The publication of these templates is not evidence that an Azure deployment has passed.

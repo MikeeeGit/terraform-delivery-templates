@@ -1,10 +1,11 @@
-# Worked Azure deployment: three tiers and two AKS slots
+<a id="worked-azure-deployment-three-tiers-and-two-aks-slots"></a>
+# Worked Azure deployment: three tiers and two AKS clusters
 
-Deploy a disposable Azure environment through Terraform, platform and application pipelines, then rehearse an inactive-slot update, traffic switchover and rollback. Use the [identity architecture](three-tier-azure-deployment.md) for the contracts and read [ordered removal](three-tier-removal.md) before creating resources.
+Deploy a disposable Azure environment through Terraform, platform and application pipelines, then rehearse an inactive-cluster update, traffic switchover and rollback. Use the [identity architecture](three-tier-azure-deployment.md) for the contracts and read [ordered removal](three-tier-removal.md) before creating resources.
 
 For the runnable disposable Kubernetes counterpart, use the [kind worked example](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/WORKED-EXAMPLE.md). It exercises shared deployment components without creating Azure resources.
 
-**Qualification status:** the disposable direct-delivery Azure trial passed dual-slot deployment, real Key Vault CSI access, standby-only promotion, WAF traffic cutover and traffic rollback on 21 September 2026. See the [dated qualification record](qualification-2026-09-21.md) for exact runs, removal results and limits. For a new deployment, start your own evidence rows at **not run**; prior results do not qualify a different subscription or configuration.
+**Qualification status:** the disposable direct-delivery Azure trial passed dual-cluster deployment, real Key Vault CSI access, standby-only promotion, WAF traffic cutover and traffic rollback on 21 September 2026. See the [dated qualification record](qualification-2026-09-21.md) for exact runs, removal results and limits. For a new deployment, start your own evidence rows at **not run**; prior results do not qualify a different subscription or configuration.
 
 ## Select scope and capacity
 
@@ -12,7 +13,7 @@ The example uses `pprd/uks` as a selector; that name does not authorise changes 
 
 Create hub and both spoke **networks**, one firewall/route add-on, one workload vault, the PPRD AKS pair and one WAF gateway. Leave PRD clusters/gateway and regional recovery workloads undeployed. The maintained network/route pack references both spokes; omitting one requires an intentional configuration change.
 
-Use the maintained [disposable dual-AKS lab profile](https://github.com/MikeeeGit/azure-aks-foundation/tree/main/examples/disposable-lab). Each slot has two `Standard_D4s_v4` system nodes, no user pool, fixed counts and `sku_tier = "Free"`. Its explicit `system_pool.only_critical_addons_enabled = false` allows application/Envoy workloads on those nodes. Normal inputs default to `true`, preserving dedicated system pools and a separate user pool.
+Use the maintained [disposable dual-AKS lab profile](https://github.com/MikeeeGit/azure-aks-foundation/tree/main/examples/disposable-lab). Each cluster has two `Standard_D4s_v4` system nodes, no user pool, fixed counts and `sku_tier = "Free"`. Its explicit `system_pool.only_critical_addons_enabled = false` allows application/Envoy workloads on those nodes. Normal inputs default to `true`, preserving dedicated system pools and a separate user pool.
 
 This is an evaluation tradeoff: application/controller pressure can affect system workloads, and the Free tier has no financially backed control-plane uptime SLA. Preserve replicas, readiness/disruption protections and host encryption. If scheduling or requests exceed capacity, stop and review more capacity; optional Argo services add demand. The dated Azure trial exercised this small profile for functional acceptance, not a load or upgrade-capacity benchmark.
 
@@ -20,12 +21,12 @@ Microsoft currently documents at least two nodes and a four-vCPU VM for system p
 
 | Capacity event | DSv4-family vCPUs |
 | --- | ---: |
-| Both slots at steady state: four D4s_v4 nodes | 16 |
-| One slot adds its single upgrade surge node | 20 |
-| Both slots surge concurrently | 24 |
+| Both clusters at steady state: four D4s_v4 nodes | 16 |
+| One cluster adds its single upgrade surge node | 20 |
+| Both clusters surge concurrently | 24 |
 | Private D2s_v4 worker, accounted separately | 2 additional |
 
-Serialize slot upgrades for this trial: reserve **16 steady AKS vCPUs plus four surge vCPUs**, then add the worker and any other regional/family usage. A worker-inclusive 24-core quota is insufficient for two concurrent surges if the worker also uses DSv4. SKU visibility does not grant quota or guarantee allocation. The profile retains `max_surge = "10%"`, which adds one node on a two-node pool.
+Serialize cluster upgrades for this trial: reserve **16 steady AKS vCPUs plus four surge vCPUs**, then add the worker and any other regional/family usage. A worker-inclusive 24-core quota is insufficient for two concurrent surges if the worker also uses DSv4. SKU visibility does not grant quota or guarantee allocation. The profile retains `max_surge = "10%"`, which adds one node on a two-node pool.
 
 Merge the profile's complete `clusters` map into the private AKS target before helper/CI delivery; extra example tfvars are not automatically loaded. Keep fixed counts and omit both `min_count` and `max_count`. Choose available zones and supported versions. Retain a regional estimate from the [pricing calculator](https://azure.microsoft.com/pricing/calculator/), a budget alert and cleanup time (budget alerts do not stop spending). Free cluster management does not make nodes, disks, Firewall, WAF, load balancers, ACR, workers or storage free.
 
@@ -171,7 +172,7 @@ python3 terraform-delivery-templates/scripts/azure/three_tier_handoff.py ci \
 
 Merge generated `delivery_principals` into `aks-lab-aks/config/uks/pprd/pprd.tfvars`. Helpers read only global/selected target tfvars, not extra generated files. Choose `kubernetes_authorization_mode = "kubernetes_rbac"` and reviewed existing Entra administrator groups. Terraform creates CI Cluster User access, both workload OIDC federations and exact vault rights.
 
-Apply AKS; verify private user API, node and add-on readiness on both slots. In the local AKS checkout select `tf_setup aks-lab-aks pprd uks`, run `tf_env` and `tf_init`, and verify its backend before exporting. From the workspace, export `terraform -chdir=aks-lab-aks output -json > evidence/aks.json`, then:
+Apply AKS; verify private user API, node and add-on readiness on both clusters. In the local AKS checkout select `tf_setup aks-lab-aks pprd uks`, run `tf_env` and `tf_init`, and verify its backend before exporting. From the workspace, export `terraform -chdir=aks-lab-aks output -json > evidence/aks.json`, then:
 
 ```bash
 python3 terraform-delivery-templates/scripts/azure/three_tier_handoff.py application \
@@ -192,7 +193,7 @@ Review and overlay generated application/platform files onto complete consumers.
 
 Install pinned Python/client dependencies using [getting started](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/getting-started.md).
 
-Run [identity discovery](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/native-azure-authorization.md) as the actual platform and application CI identities on both slots: four observations for two shared environment identities. Match tenant/client/cluster to Terraform and retain the API-returned usernames.
+Run [identity discovery](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/native-azure-authorization.md) as the actual platform and application CI identities on both clusters: four observations for two shared environment identities. Match tenant/client/cluster to Terraform and retain the API-returned usernames.
 
 An existing Entra operator performs [first platform CI bootstrap](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-ci-bootstrap.md). Copy `examples/platform.access.json`, select the dedicated platform key, and combine original platform discovery records into a JSON array. From the private app consumer:
 
@@ -207,9 +208,9 @@ An existing Entra operator performs [first platform CI bootstrap](https://github
 
 Repeat for aks02 after reviewing the first result. This explicit binding gives the platform identity broad Kubernetes administration for CRDs/controllers/RBAC; application/build purposes cannot be selected. Initial operator authority remains a prerequisite.
 
-Deploy platform services next: copy shared `examples/github-platform.yml` or `examples/azure-platform.yml` into the platform consumer, aligning every reference to the reviewed shared commit. Deploy both slots sequentially through the actual platform CI identity. It prepares/reviews the receipt, installs CRDs/controllers and creates platform-owned ServiceAccounts, Gateways and proxies. [Platform services](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-services.md) documents exact local prepare/apply commands for diagnosis.
+Deploy platform services next: copy shared `examples/github-platform.yml` or `examples/azure-platform.yml` into the platform consumer, aligning every reference to the reviewed shared commit. Deploy both clusters sequentially through the actual platform CI identity. It prepares/reviews the receipt, installs CRDs/controllers and creates platform-owned ServiceAccounts, Gateways and proxies. [Platform services](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-services.md) documents exact local prepare/apply commands for diagnosis.
 
-Populate `bootstrap.native.apps.json` from application discovery and the actual Pod Security minor, then commit it. Run the protected application-bootstrap caller for both slots. In the tested Azure DevOps profile, its **dedicated bootstrap service connection uses the same Terraform-declared platform managed identity** that received the native platform binding above. Authorize that connection only for the intended namespace-bootstrap pipelines and protect the separate `bootstrap-pprd-uks-aks01/aks02` approval environments. The application deploy connection still uses the separate namespace-scoped application identity.
+Populate `bootstrap.native.apps.json` from application discovery and the actual Pod Security minor, then commit it. Run the protected application-bootstrap caller for both clusters. In the tested Azure DevOps profile, its **dedicated bootstrap service connection uses the same Terraform-declared platform managed identity** that received the native platform binding above. Authorize that connection only for the intended namespace-bootstrap pipelines and protect the separate `bootstrap-pprd-uks-aks01/aks02` approval environments. The application deploy connection still uses the separate namespace-scoped application identity.
 
 A separate bootstrap managed identity is an optional design change: declare its own Terraform Cluster User access, observe its actual Kubernetes username and explicitly bind that platform-purpose principal before using it. Creating another connection does not create those grants automatically. The authorised operator can perform the tested namespace-bootstrap operation locally:
 
@@ -223,13 +224,13 @@ SOURCE_COMMIT=$(git rev-parse HEAD)
 
 Repeat for aks02. Verify app HTTPRoute/CSI dry-run succeeds while RoleBinding, Gateway mutation and cluster writes are forbidden. Record those negative checks separately; the dated trial's successful deployment does not stand in for every authorization case.
 
-**Gate:** actual platform CI operations pass on both slots, CRDs are Established and controllers ready. Observe intended private IP allocation. Initial TLS readiness may await the CSI mounting app, but controller failures/Pending Pods must be resolved. Operator success alone does not qualify federated CI.
+**Gate:** actual platform CI operations pass on both clusters, CRDs are Established and controllers ready. Observe intended private IP allocation. Initial TLS readiness may await the CSI mounting app, but controller failures/Pending Pods must be resolved. Operator success alone does not qualify federated CI.
 
 ## Tier 3: release and qualify the app
 
 Use the full [Azure workload callers](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-WORKLOAD.md). Copy the GitHub build/deploy caller to `.github/workflows/build-deploy.yml` and matching promotion caller to `.github/workflows/promote.yml`, or create Azure pipelines for their equivalent YAML. Select `delivery.azure-workload.apps.json`, actual build/deploy identities and private workers; update all shared references together.
 
-Run release **A** on `["aks01","aks02"]` sequentially. Retain producer run, source commit, immutable digest, security receipt and both deployment/Azure qualification reports. Each slot must return A and its own slot value. The qualifier checks actual Pod/CSI identity, object version, mounted-secret readiness and revision without exporting secret values. Do not use platform privileges for app qualification.
+Run release **A** on `["aks01","aks02"]` sequentially. Retain producer run, source commit, immutable digest, security receipt and both deployment/Azure qualification reports. Each cluster must return A and its own cluster value. The qualifier checks actual Pod/CSI identity, object version, mounted-secret readiness and revision without exporting secret values. Do not use platform privileges for app qualification.
 
 For Argo, retain the same Azure workload profile and use the [build-only/Git promotion route](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-WORKLOAD.md#argo-cd-uses-the-same-azure-profile), followed by the same qualifier after exact-revision sync. Argo reconciles rendered YAML produced from Kustomize. Choose one writer per namespace.
 
@@ -242,7 +243,7 @@ curl --fail --show-error --cacert "$PUBLIC_CA_FILE" --resolve "$WEB_HOST:443:$SL
 curl --fail --show-error --cacert "$PUBLIC_CA_FILE" --resolve "$API_HOST:443:$SLOT_PRIVATE_IP" "https://$API_HOST/api/version"
 ```
 
-Retain TLS verification; check slot/revision, rejected hosts and actual Cilium policy. Merge the [HTTPS-first gateway profile](https://github.com/MikeeeGit/azure-application-gateway/tree/main/examples/https-first) into the private gateway target. Stable `backend_dns_records.service.ip_addresses` points to verified aks01; preview points to aks02. Apply only after both backends and frontend certificate access are ready.
+Retain TLS verification; check cluster/revision, rejected hosts and actual Cilium policy. Merge the [HTTPS-first gateway profile](https://github.com/MikeeeGit/azure-application-gateway/tree/main/examples/https-first) into the private gateway target. Stable `backend_dns_records.service.ip_addresses` points to verified aks01; preview points to aks02. Apply only after both backends and frontend certificate access are ready.
 
 ```bash
 az network application-gateway show-backend-health \
@@ -253,18 +254,18 @@ Test actual frontend TLS/web/API/preview/redirect/WAF behavior, not only probes.
 
 | Step | App operation | Terraform traffic operation | Acceptance |
 | --- | --- | --- | --- |
-| Baseline | A on both slots | Stable alias → aks01 | Both qualify; stable A/aks01 |
+| Baseline | A on both clusters | Stable alias → aks01 | Both qualify; stable A/aks01 |
 | Candidate | Build B; deploy aks02 only | None | Preview B; stable remains A |
 | Switchover | Keep both running | Fresh saved plan: alias → aks02 | Stable requests converge to B/aks02 |
 | Traffic rollback | Preserve A on aks01 | Fresh plan: alias → aks01 | Stable A/aks01 restored |
 | Additional app rollback | Promote original successful A receipt to aks02 without rebuild | None | Original digest and Azure qualification pass; this additional operation was not exercised in the dated Azure trial |
 | Optional repeat | Re-promote/requalify B on aks02 | Separately approve alias → aks02 | Full evidence retained |
 
-For GitHub promotion, choose A's successful producer run and `build-workflow=build-deploy.yml` when that was its producer; `image-build.yml` is different. Azure promotion likewise needs the actual producer definition/run. Under Argo, reverse reviewed desired state and sync only the selected slot.
+For GitHub promotion, choose A's successful producer run and `build-workflow=build-deploy.yml` when that was its producer; `image-build.yml` is different. Azure promotion likewise needs the actual producer definition/run. Under Argo, reverse reviewed desired state and sync only the selected cluster.
 
-Use the app repository’s [Azure traffic qualifier](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-WORKLOAD.md#qualify-the-stable-azure-gateway-through-cutover-and-rollback) at each row. Retain separate reports against the same gateway resource, frontend IP and hostnames; it checks actual frontend ownership, selected backend health and CA-verified responses for the expected slot/revision. The CSI and traffic reports establish different parts of the path.
+Use the app repository’s [Azure traffic qualifier](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-WORKLOAD.md#qualify-the-stable-azure-gateway-through-cutover-and-rollback) at each row. Retain separate reports against the same gateway resource, frontend IP and hostnames; it checks actual frontend ownership, selected backend health and CA-verified responses for the expected cluster/revision. The CSI and traffic reports establish different parts of the path.
 
-The WAF endpoint/listeners/backend FQDN remain stable. DNS caches, probes and connections make convergence noninstantaneous. Keep the former healthy slot through the rollback window. Never apply a stale plan after editing inputs. See [cutover semantics](https://github.com/MikeeeGit/azure-application-gateway/blob/main/docs/cutover.md). This stateless exercise does not qualify database rollback or regional recovery.
+The WAF endpoint/listeners/backend FQDN remain stable. DNS caches, probes and connections make convergence noninstantaneous. Keep the former healthy cluster through the rollback window. Never apply a stale plan after editing inputs. See [cutover semantics](https://github.com/MikeeeGit/azure-application-gateway/blob/main/docs/cutover.md). This stateless exercise does not qualify database rollback or regional recovery.
 
 ## Evidence and failure recovery
 
@@ -281,11 +282,11 @@ Retain exact source/template/tool/chart/image versions, state keys, Azure IDs, t
 | WAF | Backend health, TLS and real stable/preview responses | Not run |
 | Candidate/cutover | Inactive B, unchanged active A, stable B after apply | Not run |
 | Rollback | Traffic restored A and app receipt rollback requalified | Not run |
-| Optional rotation | New test-secret version on all mounting Pods, both slots | Not run |
+| Optional rotation | New test-secret version on all mounting Pods, both clusters | Not run |
 | Removal | Ordered destroy and remaining/retained inventory | Not run |
 
 Use passed, failed, not run or intentionally retained, with evidence and timestamps. A kind pass cannot replace an Azure row.
 
-For partial Terraform failure, keep state, inspect actual resources and generate a fresh plan in the same root/key. For federation failures, correct exact trust and repeat discovery as the intended identity. For private timeouts, fix DNS/routes/worker access while retaining TLS/private API controls. For Pending Pods or Helm failure, inspect scheduling/release state and prepare a fresh receipt after correction. For CSI failure, inspect issuer/subject/client, vault grant/object and private network path. Keep stable traffic on the healthy slot while correcting a candidate.
+For partial Terraform failure, keep state, inspect actual resources and generate a fresh plan in the same root/key. For federation failures, correct exact trust and repeat discovery as the intended identity. For private timeouts, fix DNS/routes/worker access while retaining TLS/private API controls. For Pending Pods or Helm failure, inspect scheduling/release state and prepare a fresh receipt after correction. For CSI failure, inspect issuer/subject/client, vault grant/object and private network path. Keep stable traffic on the healthy cluster while correcting a candidate.
 
 If removal is interrupted, preserve state, authority and networking and resume [ordered removal](three-tier-removal.md) at the last verified gate. The Azure rehearsal is complete only when the selected delivery method, both clusters, real managed services, traffic rehearsal and removal have retained successful evidence.

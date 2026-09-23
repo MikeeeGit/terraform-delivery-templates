@@ -4,6 +4,21 @@ Use this page as the run list. The [worked deployment](three-tier-worked-example
 
 The disposable Azure profile uses one selected subscription, UK South, a hub and two spoke networks, and **two AKS clusters in the PPRD spoke**. The second spoke has no clusters. These environment names select new lab resources. Dynatrace is excluded.
 
+## Choose direct delivery or Argo CD
+
+**aks01 and aks02 are independent target AKS clusters**, not deployment slots.
+Use **targetClusters / target-clusters** in the maintained pipeline callers;
+use **targetCluster / target-cluster** when selecting one cluster. Upgrade the
+caller and its pinned shared-template revision together.
+
+Both paths share Terraform infrastructure, Azure identities/FICs/RBAC and the
+Gateway API/Envoy platform. For **direct delivery**, follow the table below.
+For **Argo CD**, complete common actions 1–9 and then follow the
+[Azure Argo pipeline run list](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-ARGOCD.md) for install, image build,
+GitOps proposal, bootstrap, sync, CSI verification and retirement. Argo owns
+application writes; WAF traffic changes remain reviewed Terraform operations.
+Keep one delivery owner per application/cluster.
+
 ## First-time setup
 
 1. Select the subscription, unique storage/registry names, quota and supported AKS version. Set a budget alert and removal time; an Azure budget alert does not stop spending.
@@ -26,24 +41,24 @@ Choose the corresponding private caller in your project. Save each successful ru
 | 4 — infrastructure | Workload vault | Private endpoint/DNS and seed roles applied. Seed TLS and qualification material; review the trusted-services option for Gateway certificate retrieval. |
 | 5 — infrastructure | Dual AKS | Apply the complete pprd/uks pair, including workload MI, both FICs, Key Vault/ACR grants and CI Cluster User grants. |
 | 6 — handoff | Generate configuration | Run three_tier_handoff.py against actual wrapped Terraform outputs; commit the private platform/app bindings. |
-| 7 — access | Discover identities | Observe platform and application Kubernetes identities on each slot. Bootstrap platform access as the retained operator. |
-| 8 — platform | Platform services | Select **clusterSlots: [aks01, aks02]** and **deploySequentially: true**. Install Gateway API/Envoy and private TLS listener prerequisites. |
-| 9 — platform | Application bootstrap | Select **clusterSlots: [aks01, aks02]**. Use the bootstrap-only service connection bound to the declared platform MI; establish namespace/native application RBAC and verify CSI prerequisites. |
+| 7 — access | Discover identities | Observe platform and application Kubernetes identities on each cluster. Bootstrap platform access as the retained operator. |
+| 8 — platform | Platform services | Select **targetClusters: [aks01, aks02]** and **deploySequentially: true**. Install Gateway API/Envoy and private TLS listener prerequisites. |
+| 9 — platform | Application bootstrap | Select **targetClusters: [aks01, aks02]**. Use the bootstrap-only service connection bound to the declared platform MI; establish namespace/native application RBAC and verify CSI prerequisites. |
 | 10 — application | Image build | Build/test/push once; require the immutable scan to pass. Record build run ID, definition ID and receipt artifact name. |
-| 11 — application | Promote selected build | Select that build, **clusterSlots: [aks01, aks02]**, **deploySequentially: true**. Approve each rendered bundle; both slots must report the same image/revision. |
+| 11 — application | Promote selected build | Select that build, **targetClusters: [aks01, aks02]**, **deploySequentially: true**. Approve each rendered bundle; both clusters must report the same image/revision. |
 | 12 — cloud traffic | Application Gateway | Apply WAF/TLS after its certificate prerequisites. Verify actual provisioning, backend health and HTTPS through WAF. |
-| 13 — qualification | Workload and traffic checks | Retain real CSI/readiness records for both slots and the initial stable endpoint record for aks01. |
+| 13 — qualification | Workload and traffic checks | Retain real CSI/readiness records for both clusters and the initial stable endpoint record for aks01. |
 
-The sample promotion caller qualifies Azure workload identity after deployment. A queued pipeline or rendered manifest is not a completed deployment. In the Azure DevOps UI enter both slots as the object list above; REST dispatch requires object template parameters to be JSON-encoded strings.
+The sample promotion caller qualifies Azure workload identity after deployment. A queued pipeline or rendered manifest is not a completed deployment. In the Azure DevOps UI enter both clusters as the object list above; REST dispatch requires object template parameters to be JSON-encoded strings.
 
 ## Update, switch and roll back
 
 1. Commit the next app change and run **Image build** once. Keep its passed scan and release receipt.
-2. Run **Promote selected build** with the new build ID and **clusterSlots: [aks02]**. Keep aks01 on the earlier build.
+2. Run **Promote selected build** with the new build ID and **targetClusters: [aks02]**. Keep aks01 on the earlier build.
 3. Verify the standby through its preview WAF listener and prove stable web/API traffic still reaches the original aks01 revision.
 4. Change only the stable backend DNS record in Gateway Terraform to the aks02 listener IP. Run **Gateway**, review its saved plan and approve the traffic change.
 5. Run the traffic qualifier for **traffic-cutover**; require healthy selected backends and valid TLS responses from aks02 at the new revision.
-6. Restore the record to aks01 through **Gateway**. Run **traffic-rollback** and verify the original slot/revision.
+6. Restore the record to aks01 through **Gateway**. Run **traffic-rollback** and verify the original cluster/revision.
 
 DNS caching and connection draining mean switching is not instantaneous. These stateless checks cover new connections, not session continuity or stateful recovery.
 
@@ -53,6 +68,6 @@ Follow the [scripted removal run list](three-tier-removal.md#scripted-removal-ru
 
 ## Evidence and scope
 
-The [21 September 2026 qualification record](qualification-2026-09-21.md) lists the actual dual-slot Azure deployment, standby update, WAF cutover and traffic rollback results, along with removal evidence and remaining limits.
+The [21 September 2026 qualification record](qualification-2026-09-21.md) lists the actual dual-cluster Azure deployment, standby update, WAF cutover and traffic rollback results, along with removal evidence and remaining limits.
 
 Record public/offline checks, kind direct/Argo acceptance, actual Azure pipeline/identity/CSI/traffic results and final removal separately. The [sanitized original platform plan](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/containerization-platform-plan.md) and [requirements matrix](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/containerization-requirements.md) preserve the wider design and distinguish implemented capabilities from remaining qualification work.

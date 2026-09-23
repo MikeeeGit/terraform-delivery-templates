@@ -1,5 +1,13 @@
 # Remove the three-tier Azure trial safely
 
+For the Argo CD path, first follow [Argo retirement](https://github.com/MikeeeGit/aks-platform-demo/blob/main/docs/AZURE-ARGOCD.md#safe-removal)
+on both target clusters. Retire the exact Applications without cascading app
+deletion, then run the same removal procedure below. The service-removal helper
+now rejects an application namespace still targeted by an Argo Application.
+Keep the retirement pipeline available until this step succeeds; include its ID
+in the subsequent freeze. Existing service connections remain outside the exact
+lab ownership allowlist.
+
 Use this procedure after the [worked deployment](three-tier-worked-example.md), including a failed or partially completed trial. Remove Kubernetes-managed ingress resources while their controllers, nodes, identities, DNS and network still exist. Then remove dependent Terraform states in reverse dependency order. Deleting a state file is not cleanup.
 
 **Qualification status:** the complete direct-delivery Azure removal passed on **21 September 2026**. All 15 component states and the final migrated backend state were empty, and independent Azure inventory confirmed all 18 owned resource groups absent. See the [dated results and retained-item record](qualification-2026-09-21.md#full-removal-result). Record every completed, failed and intentionally retained item for each new trial, using its exact subscription, resource IDs, state keys and source revisions.
@@ -45,7 +53,7 @@ During the live trial, Azure DevOps briefly rejected endpoint deletion immediate
 | --- | --- | --- |
 | 1 | **freeze** | Pass every exact private lab pipeline ID with repeated --pipeline-id flags and --execute. No lab run may remain active/queued. Required policies are retained. |
 | 2 | Component removal | **aks-lab-gateway / pprd**; withdraw WAF traffic before removing its backends. |
-| 3 | **services** | Run once per slot with that slot's verified --bundle directory, a fresh --output and --execute. Add an explicit loopback --proxy-url only if using the operator SSH tunnel. |
+| 3 | **services** | Run once per cluster with that cluster's verified --bundle directory, a fresh --output and --execute. Add an explicit loopback --proxy-url only if using the operator SSH tunnel. |
 | 4 | Component removal, then **retire-bootstrap-pat** | **aks-lab-azure-devops-connections / hub, prd, pprd**. Keep the bootstrap PAT until these endpoints and federations are removed. Pass its recorded --authorization-id and --display-name with --execute; the helper verifies all three states are empty, revokes that exact token using delegated owner authentication, confirms the revoked-token inventory and rejected PAT authentication, then deletes its local credential file. |
 | 5 | Component removal | **aks-lab-delivery-identities / prd, pprd, hub**. The retained operator owns all remaining cleanup. |
 | 6 | Component removal | **aks-lab-aks / pprd**, then **aks-lab-workload-vault / pprd**. Record the protected vault's soft-delete retention. |
@@ -98,7 +106,7 @@ Inspect planned destruction. A trial namespace, name prefix or tag alone is not 
 
 Withdraw test public DNS/client traffic or redirect it to the explicitly retained healthy target. Remove the disposable WAF through its reviewed gateway state, or remove only the owned trial listener/backend configuration when a gateway is shared. Wait for the actual gateway operation and any required drain period; preserve certificates until the gateway no longer uses them.
 
-Freeze direct app pipelines on both slots. For Argo, follow [application ownership handover](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/argocd-operations.md#switching-between-direct-and-argo-delivery): disable any automatic reconciliation, terminate outstanding operations through the approved UI/CLI, and confirm no ApplicationSet or parent Application will recreate the app. The maintained sample uses manual sync, but inspect the actual configuration.
+Freeze direct app pipelines on both clusters. For Argo, follow [application ownership handover](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/argocd-operations.md#switching-between-direct-and-argo-delivery): disable any automatic reconciliation, terminate outstanding operations through the approved UI/CLI, and confirm no ApplicationSet or parent Application will recreate the app. The maintained sample uses manual sync, but inspect the actual configuration.
 
 Inspect the selected Application's finalizers and operation state before deletion:
 
@@ -163,7 +171,7 @@ For an already absent release, confirm that state with `helm list` and continue 
 
 If Argo was installed solely for this trial, remove its owned installation only after all applications and cleanup operations have completed. If retained, remove only the trial's owned Project/registration/credentials and grants. Remove the app namespace only after reviewing any remaining SecretProviderClass, TLS Secret, ServiceAccount and binding ownership.
 
-Repeat for the second slot.
+Repeat for the second cluster.
 
 **Gate:** no trial ingress LoadBalancer Service is pending deletion; its cloud frontend dependencies are released; owned workloads/controllers are removed or explicitly retained. The AKS nodes, Azure identities and network have remained available throughout.
 

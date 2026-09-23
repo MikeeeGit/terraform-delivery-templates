@@ -140,6 +140,24 @@ class CleanupGuards(unittest.TestCase):
                 cleanup.services(self.bundle, self.root / "retry", None, True, previous)
         command.assert_not_called()
 
+    def test_live_argo_application_blocks_workload_removal(self):
+        app = {"spec": {"destination": {"namespace": "platform-demo"}}}
+        with patch.object(cleanup, "command", return_value=b"customresourcedefinition/applications.argoproj.io"), \
+             patch.object(cleanup, "data", return_value={"items": [app]}):
+            with self.assertRaisesRegex(ValueError, "Retire Argo"):
+                cleanup.assert_argocd_retired(["kubectl"], {}, "platform-demo")
+
+    def test_other_namespace_application_does_not_block_exact_lab_cleanup(self):
+        app = {"spec": {"destination": {"namespace": "another-app"}}}
+        with patch.object(cleanup, "command", return_value=b"customresourcedefinition/applications.argoproj.io"), \
+             patch.object(cleanup, "data", return_value={"items": [app]}):
+            cleanup.assert_argocd_retired(["kubectl"], {}, "platform-demo")
+
+    def test_no_argo_crd_needs_no_application_read(self):
+        with patch.object(cleanup, "command", return_value=b""), patch.object(cleanup, "data") as read:
+            cleanup.assert_argocd_retired(["kubectl"], {}, "platform-demo")
+        read.assert_not_called()
+
     def test_backend_refuses_foreign_subscription_or_unrelated_group(self):
         def state(resource_id, kind="azurerm_storage_account"):
             return {"version":4, "lineage":"original", "serial":2, "resources":[

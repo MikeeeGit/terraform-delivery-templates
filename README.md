@@ -1,5 +1,19 @@
 # Terraform delivery templates
 
+## Target clusters
+
+The two names **aks01** and **aks02** identify independent AKS clusters. Either
+cluster can serve active traffic; the other can be updated and verified before
+a separately approved traffic switch.
+
+Pipeline selectors are now **targetClusters / target-clusters** for a list and
+**targetCluster / target-cluster** for one cluster. Update caller parameters and
+the immutable shared-template reference together. Earlier pinned revisions keep
+their earlier interface. The stored release/configuration field named
+`slot` remains the cluster identifier for compatibility with existing receipts;
+it is not an Azure App Service deployment slot.
+
+
 Reusable Azure DevOps and GitHub Actions validation, Azure delivery, and local Bash/PowerShell helpers. This public framework carries forward the environment/region and backend-alias model of AZDO-TF-Templates, with organization-specific settings replaced by explicit configuration.
 
 **Start with [getting started](docs/getting-started.md)**. An empty Azure environment starts with the [backend and identity bootstrap](docs/azure/bootstrap.md). A complete network consumer is [azure-network-foundation](https://github.com/MikeeeGit/azure-network-foundation).
@@ -40,7 +54,7 @@ The [21 September 2026 qualification record](docs/azure/qualification-2026-09-21
 For your first real Azure rehearsal, use the [sandbox deployment runbook](docs/azure/sandbox-deployment.md), including input consolidation, private access, certificate gates, costs and teardown. Follow the [hub/spoke, dual-AKS and WAF gateway scenario](docs/azure/hub-spoke-platform.md) for cross-repository deployment order, state ownership and blue/green operation. [Private network caller examples](examples/azure/hub-spoke/README.md) cover both CI platforms.
 
 
-Application delivery is provided by [AKS Delivery Templates](https://github.com/MikeeeGit/aks-delivery-templates), with a [multi-cluster sample](https://github.com/MikeeeGit/aks-platform-demo). The [worked platform guide](docs/azure/hub-spoke-platform.md) connects the shared firewall, registry, independent AKS slots, Kustomize release promotion and WAF gateway.
+Application delivery is provided by [AKS Delivery Templates](https://github.com/MikeeeGit/aks-delivery-templates), with a [multi-cluster sample](https://github.com/MikeeeGit/aks-platform-demo). The [worked platform guide](docs/azure/hub-spoke-platform.md) connects the shared firewall, registry, independent AKS clusters, Kustomize release promotion and WAF gateway.
 
 ## CI change scope
 
@@ -48,4 +62,4 @@ Markdown-only edits use lightweight required GitHub checks and are excluded from
 
 ## Three-tier Azure identity lifecycle
 
-The [three-tier Azure deployment guide](docs/azure/three-tier-azure-deployment.md) connects Terraform-managed CI identities and service connections, AKS workload federation and role assignments, platform bootstrap, and full dual-slot application delivery. It includes generated identity handoffs and a real Azure CSI qualification profile alongside the existing disposable tests.
+The [three-tier Azure deployment guide](docs/azure/three-tier-azure-deployment.md) connects Terraform-managed CI identities and service connections, AKS workload federation and role assignments, platform bootstrap, and full dual-cluster application delivery. It includes generated identity handoffs and a real Azure CSI qualification profile alongside the existing disposable tests.

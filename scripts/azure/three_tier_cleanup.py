@@ -76,6 +76,18 @@ def validate_bundle(bundle):
                for x in objects), "Bundle contains unexpected cleanup objects")
     return receipt, objects
 
+
+def assert_argocd_retired(base, env, namespace):
+    present = command(base + ["get", "crd", "applications.argoproj.io",
+                               "--ignore-not-found", "-o", "name"], env).strip()
+    if not present:
+        return
+    applications = data(base + ["get", "applications.argoproj.io", "--all-namespaces", "-o", "json"], env)
+    active = [item for item in applications["items"]
+              if item.get("spec", {}).get("destination", {}).get("namespace") == namespace]
+    tf.require(not active, "Retire Argo Applications for the application namespace before removing workloads")
+
+
 def services(bundle, output, proxy, execute, previous_inventory=None):
     receipt, objects = validate_bundle(bundle)
     tf.create_output(output)
@@ -112,6 +124,8 @@ def services(bundle, output, proxy, execute, previous_inventory=None):
     if not execute:
         print(json.dumps({"status": "inventory-only", "slot": target["slot"], "output": str(output)}))
         return
+    # A live reconciler can recreate resources during removal, even if traffic is withdrawn.
+    assert_argocd_retired(base, env, target["namespace"])
     command(base + ["delete", "-f", str(bundle / "manifest.yaml"), "--ignore-not-found=true", "--wait=true", "--timeout=300s"], env)
     command(base + ["-n", target["namespace"], "delete", "gateway", gateway,
                     "--ignore-not-found=true", "--wait=true", "--timeout=300s"], env)

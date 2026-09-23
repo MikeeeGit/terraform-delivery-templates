@@ -1,8 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Describe independent target AKS clusters and use the renamed pipeline selectors.
+- Add the complete Azure Argo path alongside direct delivery in the run list.
+- Refuse workload removal while an Argo Application targets the app namespace;
+  document retirement before the existing tested cloud teardown.
+
+
 ## 0.3.0
 
-- Reconcile the September AKS application branch and document separate cluster bootstrap, selected-build promotion and per-slot verification.
+- Reconcile the September AKS application branch and document separate cluster bootstrap, selected-build promotion and per-cluster verification.
 - Add shared private component callers for firewall, routes, AKS and gateway delivery.
 - Connect the standalone firewall, shared Kustomize delivery and multi-cluster sample application.
 - Export reviewed app targets from actual AKS/registry outputs with explicit subscription and context checks.

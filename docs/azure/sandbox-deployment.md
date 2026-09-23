@@ -1,8 +1,8 @@
 # First Azure sandbox deployment and operational rehearsal
 
-This runbook connects the public examples into a private Azure trial: hub/spoke networking, inspected egress, two independent private AKS slots, Envoy Gateway, the sample application and Application Gateway WAF. It adds a fresh HTTPS installation path while preserving the direct-Service and migration examples. Use the [architecture walkthrough](hub-spoke-platform.md) for ownership and the linked component guides for their full configuration contracts.
+This runbook connects the public examples into a private Azure trial: hub/spoke networking, inspected egress, two independent private AKS clusters, Envoy Gateway, the sample application and Application Gateway WAF. It adds a fresh HTTPS installation path while preserving the direct-Service and migration examples. Use the [architecture walkthrough](hub-spoke-platform.md) for ownership and the linked component guides for their full configuration contracts.
 
-The application has two delivery options: the existing pipeline applies Kustomize, or Argo CD reconciles application configuration from Git. Both methods share the original Kustomize source. CI renders and validates it once; Argo CD consumes the resulting plain YAML and reconciles the desired state. Read [delivery methods](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/delivery-methods.md) and the [Argo CD deployment guide](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/argocd-deployment.md). Choose one application owner for each namespace/slot. Terraform still owns Azure infrastructure and the gateway's active traffic target.
+The application has two delivery options: the existing pipeline applies Kustomize, or Argo CD reconciles application configuration from Git. Both methods share the original Kustomize source. CI renders and validates it once; Argo CD consumes the resulting plain YAML and reconciles the desired state. Read [delivery methods](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/delivery-methods.md) and the [Argo CD deployment guide](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/argocd-deployment.md). Choose one application owner for each namespace/cluster. Terraform still owns Azure infrastructure and the gateway's active traffic target.
 
 This is a paid, explicitly selected sandbox operation. The published examples contain synthetic values and are not ready to apply unchanged. Credential-free tests do not demonstrate your Azure permissions, quota, private networking, managed CSI or WAF path. Record actual evidence at each gate below.
 
@@ -10,7 +10,7 @@ For state-managed CI identities, service connections, native application permiss
 
 ## 1. Decide scope, cost and access before provisioning
 
-For the complete example, deploy the hub plus PPRD and PRD **networks**, but start with only the PPRD **AKS pair** and gateway. The current hub peerings and route-only add-on explicitly reference both spoke networks; omitting PRD requires a deliberate private configuration change, not just skipping its apply. UK West recovery workloads are outside this rehearsal. Both slots are in one region; they are upgrade/deployment slots, not regional disaster recovery.
+For the complete example, deploy the hub plus PPRD and PRD **networks**, but start with only the PPRD **AKS pair** and gateway. The current hub peerings and route-only add-on explicitly reference both spoke networks; omitting PRD requires a deliberate private configuration change, not just skipping its apply. UK West recovery workloads are outside this rehearsal. Both clusters are in one region; they are upgrade/deployment clusters, not regional disaster recovery.
 
 Record privately:
 
@@ -23,7 +23,7 @@ Record privately:
 | Delivery | Private consumers, full reviewed shared-template commits, exact OIDC subjects, approval environments and separate build/platform/app identities |
 | Operations | Named operator, start/end time, agreed spend limit, alert recipients, cleanup owner and resources intentionally retained |
 
-Estimate the selected region/SKUs using the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) before applying. Create [budget alerts](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets) and retain the estimate with the plan; alerts are not spending caps. The supplied PPRD pair starts six `Standard_D4s_v5` nodes (two system and one user node per slot), and aks02 can grow to three nodes per pool. That is 24 initial vCPUs, up to 36 before upgrade surge; each pool also permits 10% surge. Cluster tiers default Standard. Gateway autoscale defaults to min2/max10; Firewall, gateway, node disks, load balancers/public IPs, registry, storage and optional logs can continue charging while the app is idle. Any smaller sandbox settings are explicit private choices that must leave enough capacity for two controllers/proxies, the app and system workloads.
+Estimate the selected region/SKUs using the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) before applying. Create [budget alerts](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets) and retain the estimate with the plan; alerts are not spending caps. The supplied PPRD pair starts six `Standard_D4s_v5` nodes (two system and one user node per cluster), and aks02 can grow to three nodes per pool. That is 24 initial vCPUs, up to 36 before upgrade surge; each pool also permits 10% surge. Cluster tiers default Standard. Gateway autoscale defaults to min2/max10; Firewall, gateway, node disks, load balancers/public IPs, registry, storage and optional logs can continue charging while the app is idle. Any smaller sandbox settings are explicit private choices that must leave enough capacity for two controllers/proxies, the app and system workloads.
 
 **Stop point:** if the identity/network/certificate prerequisites or intended spend are unclear, complete the credential-free checks and private configuration first. There is no benefit in leaving billable clusters waiting for a certificate or an unreachable runner.
 
@@ -61,7 +61,7 @@ Merge these selected maps into the corresponding **private target** before the n
 |---|---|---|
 | Firewall hub | [Platform egress](https://github.com/MikeeeGit/azure-firewall/tree/main/examples/aks-platform) `rule_collection_groups` | Exact registry/auth/CDN and vault destinations; retained other groups/priorities |
 | AKS PPRD | [TLS identity](https://github.com/MikeeeGit/azure-aks-foundation/tree/main/examples/ingress-tls) `workload_identities` | Dedicated app UAMI, two issuer federations for the same ServiceAccount, exact vault role |
-| AKS PPRD | Complete `clusters` map with actual UDR fields and chosen `.21` ingress metadata | Both slots retained, correct subnet/route-table per slot, no accidental replacement/removal |
+| AKS PPRD | Complete `clusters` map with actual UDR fields and chosen `.21` ingress metadata | Both clusters retained, correct subnet/route-table per cluster, no accidental replacement/removal |
 | Gateway PPRD | [HTTPS-first](https://github.com/MikeeeGit/azure-application-gateway/tree/main/examples/https-first) `backend_settings`, `backend_dns_records`, `backend_pools` | Live aks01 `.21`, preview aks02 `.21`, HTTPS443 and expected Host/probes |
 
 For an existing serving HTTP deployment use the separate candidate/cutover profiles instead; the fresh profile is not a migration shortcut. Keep the selected target's old reviewed maps and plans available for rollback.
@@ -109,7 +109,7 @@ Export outputs from each selected initialized root into a **new private evidence
 | Producer | Values consumed next |
 |---|---|
 | Hub network | `vnet_id`, `vnet-rg`, `subnet_ids.AzureFirewallSubnet`, corresponding prefix, managed private DNS zone IDs, `acr_id`, `acr_name`, `acr_login_server` |
-| Spoke network | `vnet`, `vnet_id`, subnet IDs/prefixes for each slot and gateway; actual address spaces |
+| Spoke network | `vnet`, `vnet_id`, subnet IDs/prefixes for each cluster and gateway; actual address spaces |
 | Firewall | `firewall_id`, `firewall_private_ip`, policy/public-IP IDs |
 | Route add-on | `route_table_ids.pprd.aks01`, `.aks02` and associated subnet IDs |
 
@@ -127,7 +127,7 @@ Provision/reuse the reviewed certificate vaults before their dependent role assi
 
 Update the full AKS target from actual spoke/subnet/DNS/ACR/route outputs. Preserve both cluster entries, independent pod/Service CIDRs and selected versions. Merge the workload identity map and configure real administrative Entra group IDs. Set desired ingress metadata to the chosen Envoy `.21` values; it is metadata until a Kubernetes Service actually allocates that frontend. Apply the reviewed plan.
 
-Verify both slots independently: Entra **user** kubeconfig, private FQDN resolution, node/add-on readiness, kubelet registry permission and authenticated image pulls. Local accounts and Run Command are disabled; do not use `--admin` or make the API public to bypass a failing management path. Allow normal role/federation propagation, inspect the actual error, and review a fresh plan before infrastructure retry.
+Verify both clusters independently: Entra **user** kubeconfig, private FQDN resolution, node/add-on readiness, kubelet registry permission and authenticated image pulls. Local accounts and Run Command are disabled; do not use `--admin` or make the API public to bypass a failing management path. Allow normal role/federation propagation, inspect the actual error, and review a fresh plan before infrastructure retry.
 
 Export `clusters`, `workload_identities`, `deployment_context` and registry outputs privately, then use [the workload handoff helper](workload-identity-handoff.md). It validates the actual identity, both OIDC issuers and exact subject `system:serviceaccount:platform-demo:platform-demo`, without exporting keys. Review the new delivery JSON and ServiceAccount binding. Update the app and platform declarations consistently with the same applied client ID, tenant ID, vault/object names, namespace and selected cluster targets.
 
@@ -137,9 +137,9 @@ Export `clusters`, `workload_identities`, `deployment_context` and registry outp
 
 Use the [operator walkthrough](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/operators-walkthrough.md) and [platform services guide](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/platform-services.md). Bootstrap the restricted app namespace and scoped application access with the separately approved bootstrap identity. Set Pod Security policy versions to the actual chosen cluster minor. The platform identity requires cluster-scoped permission for CRDs, GatewayClass, controller RBAC and Helm; ordinary application delivery must remain separate.
 
-The pipeline-driven method needs actual permission for HTTPRoute and SecretProviderClass operations and Gateway status reads. Namespace Azure RBAC Writer alone is not proof of these custom-resource rights. Review the [explicit authorization recipe](https://github.com/MikeeeGit/aks-delivery-templates/tree/main/examples/authorization), including its opt-in Azure ABAC preview and namespace trust boundary. Qualify positive server-dry-run and negative platform-write tests using the actual app deployer on both slots. If preview is unsuitable, choose and validate a different authorization model before app delivery; do not silently broaden the app identity. Argo CD has its own reconciler permissions and registration/bootstrap contract in its deployment guide.
+The pipeline-driven method needs actual permission for HTTPRoute and SecretProviderClass operations and Gateway status reads. Namespace Azure RBAC Writer alone is not proof of these custom-resource rights. Review the [explicit authorization recipe](https://github.com/MikeeeGit/aks-delivery-templates/tree/main/examples/authorization), including its opt-in Azure ABAC preview and namespace trust boundary. Qualify positive server-dry-run and negative platform-write tests using the actual app deployer on both clusters. If preview is unsuitable, choose and validate a different authorization model before app delivery; do not silently broaden the app identity. Argo CD has its own reconciler permissions and registration/bootstrap contract in its deployment guide.
 
-Copy the maintained Envoy platform example's **contents** into the private platform consumer. Replace target IDs and reserved frontend/subnet/source-range values; keep chart/CRD/image pins aligned. Prepare and review its immutable bundle, then install both slots sequentially through the separately approved platform lifecycle. The controller runs in `envoy-gateway-system`; proxy and TLS Gateway are in `platform-demo`. Do not put controller credentials in the app namespace.
+Copy the maintained Envoy platform example's **contents** into the private platform consumer. Replace target IDs and reserved frontend/subnet/source-range values; keep chart/CRD/image pins aligned. Prepare and review its immutable bundle, then install both clusters sequentially through the separately approved platform lifecycle. The controller runs in `envoy-gateway-system`; proxy and TLS Gateway are in `platform-demo`. Do not put controller credentials in the app namespace.
 
 First installation may leave Gateway pending because the TLS Secret does not yet exist. The app's live CSI mounting pod synchronizes `platform-demo-tls`; platform controller readiness must succeed first, while full Gateway/HTTPS acceptance follows app rollout. A pending first-use certificate is not permission to ignore later Gateway/route failures.
 
@@ -149,9 +149,9 @@ First installation may leave Gateway pending because the TLS Secret does not yet
 
 Build the protected source commit once, push it to the chosen ACR and scan the exact immutable digest. A promotable receipt exists only after the security gate passes and binds source, digest and trusted producer run. Retain that receipt and its scan result privately. Registry presence or a mutable tag is not equivalent evidence.
 
-For pipeline delivery, use the sample's private callers with `delivery.gateway.apps.json`, the reviewed shared-template SHA and exact selected slots. Render/review the Kustomize bundle and deploy the same digest to both clusters, sequentially by default. Require rollout, observed source revision/slot, current Gateway and HTTPRoute conditions, and certificate-validated web/API responses.
+For pipeline delivery, use the sample's private callers with `delivery.gateway.apps.json`, the reviewed shared-template SHA and exact selected clusters. Render/review the Kustomize bundle and deploy the same digest to both clusters, sequentially by default. Require rollout, observed source revision/cluster, current Gateway and HTTPRoute conditions, and certificate-validated web/API responses.
 
-For Argo CD, follow the additional [deployment/design guide](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/argocd-deployment.md) and its operational instructions. Promote the approved digest/source into the reviewed Git desired state for the selected slot, observe reconciliation and perform the same release/HTTPS checks. Argo health/sync status alone is not a test of the Azure request path. Do not run imperative application apply against resources Argo is reconciling. Changing ownership between methods is an explicit controlled handover, preserving platform resources and traffic ownership.
+For Argo CD, follow the additional [deployment/design guide](https://github.com/MikeeeGit/aks-delivery-templates/blob/main/docs/argocd-deployment.md) and its operational instructions. Promote the approved digest/source into the reviewed Git desired state for the selected cluster, observe reconciliation and perform the same release/HTTPS checks. Argo health/sync status alone is not a test of the Azure request path. Do not run imperative application apply against resources Argo is reconciling. Changing ownership between methods is an explicit controlled handover, preserving platform resources and traffic ownership.
 
 Check the CSI mount and `SecretProviderClassPodStatus`; inspect Secret type/key **names** without printing key bytes. Verify certificate SAN/chain/expiry as a TLS client and rehearse renewal/reload separately. Retain a mounting workload while its synchronized Secret is required. The app's ServiceAccount and projected federation token are separate from the delivery identity.
 
@@ -161,7 +161,7 @@ The reusable HTTPS test uses port forwarding to the selected Envoy Service. It e
 
 The supplied Envoy source ranges allow only the Application Gateway subnet. A management worker in the hub is intentionally excluded from direct ILB access. For private diagnostics, add a separately reviewed narrow worker source range to both private profiles or use another allowed diagnostic path; remove temporary access afterward. Do not put a VM into the dedicated gateway subnet or widen access to the Internet. A timeout from an excluded source is not proof that Envoy is unhealthy.
 
-From an allowed private source, test each real frontend with certificate hostname verification. For example, set the real host/IP/slot values first:
+From an allowed private source, test each real frontend with certificate hostname verification. For example, set the real host/IP/cluster values first:
 
 ```bash
 curl --fail --show-error --resolve "$WEB_HOST:443:$SLOT_PRIVATE_IP" "https://$WEB_HOST/healthz"
@@ -169,7 +169,7 @@ curl --fail --show-error --resolve "$WEB_HOST:443:$SLOT_PRIVATE_IP" "https://$WE
 curl --fail --show-error --resolve "$API_HOST:443:$SLOT_PRIVATE_IP" "https://$API_HOST/api/version"
 ```
 
-Do not use `-k`. Verify exact expected slot/revision, allowed and rejected hosts, and Cilium NetworkPolicy from explicitly allowed/denied test clients. The final Envoy-to-app hop is HTTP with NetworkPolicy, not workload mTLS. A default kind cluster cannot prove Azure Cilium enforcement.
+Do not use `-k`. Verify exact expected cluster/revision, allowed and rejected hosts, and Cilium NetworkPolicy from explicitly allowed/denied test clients. The final Envoy-to-app hop is HTTP with NetworkPolicy, not workload mTLS. A default kind cluster cannot prove Azure Cilium enforcement.
 
 For a genuinely empty gateway, merge the [HTTPS-first profile](https://github.com/MikeeeGit/azure-application-gateway/tree/main/examples/https-first) into private gateway PPRD inputs: stable alias → verified aks01 `.21`, preview → verified aks02 `.21`, all backend settings HTTPS443. The gateway owns its child alias zone and links; include the hub link when the firewall is the DNS proxy. Use distinct environment alias zones if sharing a hub. Inspect the saved plan and apply only after both backends and frontend certificate access are ready.
 
@@ -186,15 +186,15 @@ Verify the public/private listener paths, frontend TLS/SANs, redirects, web/API 
 
 ## 9. Rehearse update, traffic cutover and rollback
 
-Keep aks01 active and deploy a second scanned source/digest only to aks02 through the chosen method. Check the active slot remains unchanged and the preview shows the new release. Retain the previous source/digest and complete gateway configuration.
+Keep aks01 active and deploy a second scanned source/digest only to aks02 through the chosen method. Check the active cluster remains unchanged and the preview shows the new release. Retain the previous source/digest and complete gateway configuration.
 
-Create a separately reviewed gateway saved plan to move the stable alias to the verified candidate, with the correct protocol/Host/probe contract. Neither the application pipeline nor Argo CD changes this Terraform traffic target. Observe DNS/probe/connection convergence and real requests; a TTL does not promise instantaneous or zero-downtime cutover. Retarget preview to the now-inactive slot when preparing the next release.
+Create a separately reviewed gateway saved plan to move the stable alias to the verified candidate, with the correct protocol/Host/probe contract. Neither the application pipeline nor Argo CD changes this Terraform traffic target. Observe DNS/probe/connection convergence and real requests; a TTL does not promise instantaneous or zero-downtime cutover. Retarget preview to the now-inactive cluster when preparing the next release.
 
 Rehearse application rollback through the same owner (previous receipt for pipeline delivery; reviewed desired-state reversal for Argo) and traffic rollback through a separate gateway plan. If returning to a legacy HTTP endpoint, restore both address and protocol. Keep data/schema migration and recovery separate; this stateless sample does not prove database rollback or replicated regional failover.
 
 ## 10. Retain evidence and remove the sandbox deliberately
 
-Record exact repository/template commits, tool/chart/image digests, state keys, selected Azure IDs, reviewed plans, producer/deployment or reconciliation runs, scan receipts, both-slot responses and observed cutover/rollback outcomes. Keep an explicit passed/failed/not-run table. Retain sensitive environment metadata privately. Do not archive raw kubeconfigs, token-bearing logs, state or TLS key material with a public test report.
+Record exact repository/template commits, tool/chart/image digests, state keys, selected Azure IDs, reviewed plans, producer/deployment or reconciliation runs, scan receipts, both-cluster responses and observed cutover/rollback outcomes. Keep an explicit passed/failed/not-run table. Retain sensitive environment metadata privately. Do not archive raw kubeconfigs, token-bearing logs, state or TLS key material with a public test report.
 
 Cleanup is an operation with dependencies, not deletion of a state file:
 
@@ -214,7 +214,7 @@ Use the correct initialized private root and review a destroy plan before invoki
 |---|---|---|
 | Terraform format/validate and provider mocks | Declared schema, target contracts and tested composition/guard behavior | Policy, quota, resource IDs, role propagation and actual provider service behavior |
 | Local app tests, Helm/Kustomize render and receipt tests | App behavior and selected-source/digest/configuration safety contracts | Cluster admission, runtime networking and managed services |
-| Hosted two-cluster pipeline acceptance | Real tested image deployment, Envoy HTTPS, selected-slot update and rollback in its temporary Kubernetes environment | Azure CNI/ILB/private API, Entra, CSI/vault and WAF |
+| Hosted two-cluster pipeline acceptance | Real tested image deployment, Envoy HTTPS, selected-cluster update and rollback in its temporary Kubernetes environment | Azure CNI/ILB/private API, Entra, CSI/vault and WAF |
 | Hosted Argo acceptance, when a retained run passes | Only the actual reconciliation, ownership and release scenarios in that report | Azure integrations and untested Git-host/identity arrangements |
 | This private sandbox rehearsal | The real Azure checks individually recorded as passed | Production load, longer-term rotation/upgrade, observability, recovery and untested scenarios |
 
