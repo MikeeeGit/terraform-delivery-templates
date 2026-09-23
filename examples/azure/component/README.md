@@ -16,6 +16,6 @@ Use these inactive caller examples for each separate private infrastructure cons
 | AKS | pprd/uks or prd/uks | Validated DNS/routes, dedicated subnets, ACR and private API zone |
 | Gateway WAF | pprd/uks (the supplied complete target) | Dedicated subnet, valid TLS certificate, deployed internal application Services |
 
-A selectable target must exist in that component's delivery.azure.json and config/ files; the common helper rejects unsupported selections. Route delivery deliberately grants explicit permissions in the two spoke subscriptions while remaining a single hub-owned state. Application Gateway traffic changes use the same reviewed component pipeline after inactive-slot smoke tests.
+A selectable target must exist in that component's delivery.azure.json and config/ files; the common helper rejects unsupported selections. Route delivery deliberately grants explicit permissions in the two spoke subscriptions while remaining a single hub-owned state. Application Gateway traffic changes use the same reviewed component pipeline after inactive-cluster smoke tests.
 
 Apply dependencies in the order in the [complete platform walkthrough](../../../docs/azure/hub-spoke-platform.md). Separate states do not imply automatic cross-repository orchestration: each readiness gate must pass before the next component is started. Namespace/bootstrap and application delivery use the shared AKS templates after infrastructure readiness.

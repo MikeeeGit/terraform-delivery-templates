@@ -81,7 +81,7 @@ The local `ca.pem` and gateway backend trust establish separate client-to-gatewa
 
 ## Remove and rotate the trial material
 
-Keep both slots and the old certificate versions available until rollback acceptance is complete. For a longer trial, generate a fresh directory/CA, review the public trust changes and seed new leaf/PFX versions; changing the frontend Key Vault version does not instantly prove gateway refresh, and changing the backend secret does not instantly prove CSI synchronization. Observe the current live certificate and rerun qualification before retiring prior trust.
+Keep both clusters and the old certificate versions available until rollback acceptance is complete. For a longer trial, generate a fresh directory/CA, review the public trust changes and seed new leaf/PFX versions; changing the frontend Key Vault version does not instantly prove gateway refresh, and changing the backend secret does not instantly prove CSI synchronization. Observe the current live certificate and rerun qualification before retiring prior trust.
 
 Follow the [ordered three-tier removal](../../../../docs/azure/three-tier-removal.md): withdraw traffic and remove dependent applications/gateway resources before retiring their vault objects. The vault has purge protection and is soft-deleted through its Terraform owner; do not attempt to purge it or bypass retention. For a retained vault, retire the exact trial objects through the approved secret/certificate lifecycle after their consumers have gone. Remove the opt-in seed-operator grants through reviewed Terraform when they are no longer required.
 
